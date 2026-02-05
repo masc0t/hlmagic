@@ -20,20 +20,21 @@ class HLMagicAgent:
         
         self.system_prompt = (
             "You are HLMagic, an autonomous Homelab Agent for WSL2. "
-            "You help users setup media and AI stacks (Ollama, Docker, Plex, Sonarr, etc.). "
-            "You have access to local tools. Use them to gather information or perform actions. "
+            "Your goal is to COMPLETELY setup and start services for the user. "
+            "DO NOT ask the user to run commands or create directories. USE YOUR TOOLS. "
+            "A typical workflow is: 1. scan_wsl_storage, 2. get_optimized_template, 3. write_compose_file, 4. deploy_service. "
+            "Continue using tools until the service is confirmed running. "
             "Always prefer /opt/hlmagic/ for configurations. "
             f"Current User IDs: {tools.get_user_ids()} "
             f"Hardware Acceleration: {primary_gpu.upper()} "
             f"Resource Constraints: {json.dumps(hw_env)} "
-            "IMPORTANT: When writing docker-compose.yml files, ALWAYS try to use 'get_optimized_template' "
-            "first to get a safe, hardware-aware base. Modify only if necessary."
         )
         self.available_tools = {
             "scan_wsl_storage": tools.scan_wsl_storage,
             "write_compose_file": tools.write_compose_file,
             "check_service_status": tools.check_service_status,
-            "get_optimized_template": tools.get_optimized_template
+            "get_optimized_template": tools.get_optimized_template,
+            "deploy_service": tools.deploy_service
         }
 
     def _ensure_model(self):
@@ -65,71 +66,94 @@ class HLMagicAgent:
 
         console.print(f"[bold cyan]HLMagic Brain thinking...[/bold cyan]")
         
-        try:
-            response = ollama.chat(
-                model=self.model,
-                messages=messages,
-                tools=[
-                    {
-                        'type': 'function',
-                        'function': {
-                            'name': 'scan_wsl_storage',
-                            'description': 'Identify Windows mount points for media.',
-                        },
-                    },
-                    {
-                        'type': 'function',
-                        'function': {
-                            'name': 'check_service_status',
-                            'description': 'Check if docker or ollama services are running.',
-                            'parameters': {
-                                'type': 'object',
-                                'properties': {
-                                    'service_name': {'type': 'string'},
-                                },
+        # Limit to 10 iterations to prevent infinite loops
+        for _ in range(10):
+            try:
+                response = ollama.chat(
+                    model=self.model,
+                    messages=messages,
+                    tools=[
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'scan_wsl_storage',
+                                'description': 'Identify Windows mount points for media.',
                             },
                         },
-                    },
-                    {
-                        'type': 'function',
-                        'function': {
-                            'name': 'get_optimized_template',
-                            'description': 'Get a safe, hardware-optimized docker-compose template for a service (e.g., plex, ollama).',
-                            'parameters': {
-                                'type': 'object',
-                                'properties': {
-                                    'service_name': {'type': 'string'},
-                                    'mounts': {
-                                        'type': 'array',
-                                        'items': {'type': 'string'},
-                                        'description': 'Optional list of host paths to mount (e.g., ["/mnt/d/Movies"]).'
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'check_service_status',
+                                'description': 'Check if docker or ollama services are running.',
+                                'parameters': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'service_name': {'type': 'string'},
                                     },
                                 },
-                                'required': ['service_name'],
                             },
                         },
-                    },
-                    {
-                        'type': 'function',
-                        'function': {
-                            'name': 'write_compose_file',
-                            'description': 'Generate a docker-compose.yml for a service.',
-                            'parameters': {
-                                'type': 'object',
-                                'properties': {
-                                    'service_name': {'type': 'string'},
-                                    'compose_content': {'type': 'string'},
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'get_optimized_template',
+                                'description': 'Get a safe, hardware-optimized docker-compose template for a service.',
+                                'parameters': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'service_name': {'type': 'string'},
+                                        'mounts': {
+                                            'type': 'array',
+                                            'items': {'type': 'string'},
+                                            'description': 'Optional list of host paths to mount (e.g., ["/mnt/d/Movies"]).'
+                                        },
+                                    },
+                                    'required': ['service_name'],
                                 },
-                                'required': ['service_name', 'compose_content'],
                             },
                         },
-                    }
-                ]
-            )
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'write_compose_file',
+                                'description': 'Generate a docker-compose.yml for a service.',
+                                'parameters': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'service_name': {'type': 'string'},
+                                        'compose_content': {'type': 'string'},
+                                    },
+                                    'required': ['service_name', 'compose_content'],
+                                },
+                            },
+                        },
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'deploy_service',
+                                'description': 'Start a service stack. MUST be called after write_compose_file.',
+                                'parameters': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'service_name': {'type': 'string'},
+                                    },
+                                    'required': ['service_name'],
+                                },
+                            },
+                        }
+                    ]
+                )
 
-            # Handle tool calls
-            if response.get('message', {}).get('tool_calls'):
-                for tool_call in response['message']['tool_calls']:
+                message = response['message']
+                messages.append(message)
+
+                # If no tool calls, the brain is done talking to us
+                if not message.get('tool_calls'):
+                    console.print(f"\n[bold green]HLMagic:[/bold green] {message['content']}")
+                    break
+
+                # Process tool calls
+                for tool_call in message['tool_calls']:
                     function_name = tool_call['function']['name']
                     args = tool_call['function']['arguments']
                     
@@ -137,19 +161,19 @@ class HLMagicAgent:
                     
                     if function_name in self.available_tools:
                         result = self.available_tools[function_name](**args)
-                        messages.append(response['message'])
                         messages.append({
                             'role': 'tool',
                             'content': str(result),
                         })
-                
-                # Get final response after tool execution
-                final_response = ollama.chat(model=self.model, messages=messages)
-                console.print(f"\n[bold green]HLMagic:[/bold green] {final_response['message']['content']}")
-            else:
-                console.print(f"\n[bold green]HLMagic:[/bold green] {response['message']['content']}")
+                    else:
+                        messages.append({
+                            'role': 'tool',
+                            'content': f"Error: Tool {function_name} not found.",
+                        })
 
-        except Exception as e:
-            console.print(f"[red]Error interacting with Ollama: {e}[/red]")
-            console.print("[yellow]Ensure Ollama is running: 'systemctl status ollama'[/yellow]")
-            console.print("[dim]Hint: You might need to pull the model first: 'ollama pull llama3'[/dim]")
+            except Exception as e:
+                console.print(f"[red]Error interacting with Ollama: {e}[/red]")
+                break
+        else:
+            console.print("[red]Error: Brain reached maximum thought depth (10 steps).[/red]")
+
