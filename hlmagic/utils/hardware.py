@@ -217,13 +217,21 @@ class HardwareScanner:
             
             console.print("[yellow]Running AMD GPU installation (ROCm usecase)...[/yellow]")
             # Use 'rocm' usecase, --no-dkms is CRITICAL for WSL2
-            result = subprocess.run(["sudo", "amdgpu-install", "-y", "--usecase=rocm", "--no-dkms"], capture_output=True, text=True)
+            # Set non-interactive flags to prevent hanging on prompts
+            env = os.environ.copy()
+            env["DEBIAN_FRONTEND"] = "noninteractive"
+            
+            # We removed capture_output=True so the user can see the progress/prompts if any
+            result = subprocess.run(
+                ["sudo", "-E", "amdgpu-install", "-y", "--usecase=rocm", "--no-dkms"], 
+                env=env
+            )
             
             if result.returncode != 0:
                 console.print("[yellow]amdgpu-install failed, attempting manual component installation...[/yellow]")
                 # Direct install of ROCm core, runtime, and tools
                 pkgs = ["rocm-core", "rocm-smi-lib", "clinfo", "rocm-opencl-runtime", "hsa-rocr"]
-                subprocess.run(["sudo", "apt-get", "install", "-y"] + pkgs, check=True)
+                subprocess.run(["sudo", "-E", "apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold"] + pkgs, env=env, check=True)
             
             # Cleanup
             if os.path.exists(deb_path):
