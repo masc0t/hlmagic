@@ -148,26 +148,30 @@ class HardwareScanner:
         ) as progress:
             
             # Common setup
-            progress.add_task(description="Configuring user permissions (render/video groups)...", total=None)
+            t1 = progress.add_task(description="Configuring user permissions...", total=None)
             self._add_user_groups()
+            progress.update(t1, description="[green]✓ User permissions configured.[/green]", completed=True)
 
             if GPUVendor.NVIDIA in self.gpus:
-                task = progress.add_task(description="Installing NVIDIA Stack (Toolkit & Docker)...", total=None)
+                t2 = progress.add_task(description="Installing NVIDIA Stack...", total=None)
                 self._install_nvidia()
+                progress.update(t2, description="[green]✓ NVIDIA Stack installed.[/green]", completed=True)
 
             if GPUVendor.AMD in self.gpus:
-                task = progress.add_task(description="Installing AMD Stack (ROCm & Overrides)...", total=None)
+                t3 = progress.add_task(description="Installing AMD Stack (ROCm)...", total=None)
                 self._install_amd()
+                progress.update(t3, description="[green]✓ AMD Stack installed.[/green]", completed=True)
 
             if GPUVendor.INTEL in self.gpus:
-                task = progress.add_task(description="Installing Intel Stack (OneAPI/Level-Zero)...", total=None)
+                t4 = progress.add_task(description="Installing Intel Stack...", total=None)
                 self._install_intel()
+                progress.update(t4, description="[green]✓ Intel Stack installed.[/green]", completed=True)
 
     def _add_user_groups(self):
         user = os.getenv("USER")
         if not user:
             return
-        # Use yes | to auto-confirm any potential prompt
+        # Use -f to avoid errors if already present, and pipe yes just in case
         subprocess.run(f"yes | sudo usermod -aG render,video {user}", shell=True, capture_output=True)
 
     def _install_nvidia(self):
@@ -176,7 +180,7 @@ class HardwareScanner:
 
         # Distribution-agnostic setup for Ubuntu 24.04 (noble)
         cmds = [
-            "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg",
+            "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg",
             "curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list",
             "sudo apt-get update",
             "sudo apt-get install -y nvidia-container-toolkit nvidia-docker2"
@@ -190,16 +194,12 @@ class HardwareScanner:
 
     def _install_amd(self):
         """Install AMD ROCm stack for WSL2."""
-        if shutil.which("amdgpu-install"):
-            # Even if installed, ensure repositories are configured
-            pass
-
         try:
             # 1. Add ROCm Repository for Noble
-            # Official ROCm 6.2 guide steps for Ubuntu 24.04
+            # Added --yes to gpg to prevent overwrite prompts
             cmds = [
                 "sudo mkdir -p /etc/apt/keyrings",
-                "curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/rocm.gpg",
+                "curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/rocm.gpg",
                 "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2 noble main' | sudo tee /etc/apt/sources.list.d/rocm.list",
                 "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/amdgpu/6.2/ubuntu noble main' | sudo tee /etc/apt/sources.list.d/amdgpu.list",
                 "sudo apt-get update"
