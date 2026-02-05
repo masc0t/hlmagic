@@ -1,111 +1,82 @@
-# 🪄 HLMagic: The Autonomous WSL2 Homelab Agent
+# 🪄 HLMagic: Your Easy AI Homelab
 
-**HLMagic** is a "zero-config" autonomous agent designed specifically for **WSL2 (Ubuntu 24.04)**. It transforms a fresh WSL2 instance into a high-performance, local-AI-powered media stack with a single command. 
+**HLMagic** is a "zero-config" assistant that turns your Windows computer into a powerful home media and AI center. 
 
-No Docker Desktop. No Cloud APIs. Just local hardware and local intelligence.
-
----
-
-## ✨ The "Magic" Features
-
-- **🛡️ Self-Healing WSL2:** Automatically patches `/etc/wsl.conf` to enable `systemd` and ensures your environment is ready for modern Linux services.
-- **🚀 Universal Hardware Engine:** Detects and configures **Intel (QuickSync/Arc)**, **NVIDIA (CUDA)**, and **AMD (ROCm)** GPUs automatically. Supports the latest drivers for Ubuntu 24.04 (Noble).
-- **🧠 Local AI Brain:** Powered by **Ollama**, the agent understands natural language instructions like *"Setup Plex using my D: drive for movies"* and executes them by writing secure, optimized Docker Compose files. It automatically pulls the required AI models if they are missing.
-- **⚙️ Resource Optimization:** Automatically applies a **60/40 VRAM split** to ensure your local LLM (The Brain) and your media server (The Muscle) coexist perfectly without crashing your host Windows OS.
-- **🔒 Security Hardened:** Every file written by the agent is audited for path traversal and dangerous volume mounts (e.g., blocking access to host `/etc` or `/proc`).
+You don't need to know how to code, how Linux works, or how to manage servers. You just talk to the agent, and it builds everything for you using your computer's hidden "Linux Mode" (WSL2).
 
 ---
 
-## 🛠️ Supported Services
-HLMagic comes with "Golden Templates" for the following, pre-tuned for your specific hardware:
-- **AI Backend:** Ollama
-- **Media Servers:** Plex, Jellyfin
-- **Automation (The Arrs):** Sonarr, Radarr, Lidarr
-- **Request Management:** Overseerr
+## 🏁 Before You Start
+Ensure you have a modern Graphics Card (GPU) from **NVIDIA**, **AMD**, or **Intel**. For the best experience, make sure your Windows drivers are up to date!
 
 ---
 
-## 🚀 Quick Start (Inside WSL2)
+## 🚀 Step-by-Step Setup
 
-### 1. Install & Initialize
-Run this command to install HLMagic and initialize your environment. This will auto-detect your GPU and install the necessary drivers.
+### Step 1: Turn on "Linux Mode" (WSL)
+1. Click your **Start Menu** and type `PowerShell`.
+2. Right-click **Windows PowerShell** and choose **Run as Administrator**.
+3. Copy and paste this command, then press Enter:
+   ```powershell
+   wsl --install -d Ubuntu-24.04
+   ```
+4. **Restart your computer** when it finishes.
 
+### Step 2: Open your New Linux Terminal
+1. After restarting, click the **Start Menu** and type `Ubuntu`. Open the app.
+2. It will ask you to create a **Username** and **Password**. 
+   * *Note: When typing your password, you won't see any dots or stars. This is normal! Just type it and hit Enter.*
+
+### Step 3: Install HLMagic
+In that same Ubuntu window, copy and paste this single line and press Enter:
 ```bash
 pip install git+https://github.com/youruser/hlmagic.git
+```
+
+### Step 4: The "Magic" Initialization
+Run this command to let the agent scan your computer and install your video card drivers automatically:
+```bash
 hlmagic init
 ```
-*Note: If systemd was just enabled, you will be prompted to run `wsl --shutdown` in Windows and restart your terminal.*
+* **If it tells you to restart:** Close the window, open PowerShell again, type `wsl --shutdown`, then reopen the Ubuntu app and run the command again.
 
-### 2. Talk to the Agent
-Once initialized, just tell HLMagic what you want:
+---
 
+## 🧠 Talking to Your Agent
+Now for the fun part. You can tell HLMagic what you want in plain English.
+
+**Example: Setup a Movie Server (Plex)**
 ```bash
-hlmagic run "Setup Plex and Sonarr, use /mnt/d/Media for storage"
+hlmagic run "Setup Plex using my D: drive for movies"
+```
+The agent will:
+1. Find your D: drive.
+2. Configure your Graphics Card so movies play smoothly.
+3. Start the server.
+
+**Check what's running:**
+```bash
+hlmagic status
 ```
 
-### 3. Manage Your Lab
-Check the status of your services or clean up:
-
+**Clean up everything (Reset):**
 ```bash
-# View all running services and ports
-hlmagic status
-
-# Stop all services and remove configuration
 hlmagic purge
 ```
 
 ---
 
-## ⚙️ Configuration
-HLMagic uses a TOML configuration file located at `~/.hlmagic/config.toml`. You can customize the AI model and other settings:
+## ❓ Simple Troubleshooting
 
-```toml
-[brain]
-model = "llama3"   # Change to 'mistral', 'gemma', etc.
-temperature = 0.1
+**"I get an error about WSL1"**
+Open PowerShell as Administrator and run:
+`wsl --set-version Ubuntu-24.04 2`
 
-[storage]
-base_path = "/opt/hlmagic"
-```
+**"My GPU isn't showing up"**
+Make sure you installed the latest drivers from the NVIDIA, AMD, or Intel website on your **Windows** desktop first.
 
----
-
-## ❓ Troubleshooting
-
-**"Error: HLMagic must be run inside WSL2" or "Found WSL1"?**  
-HLMagic requires the WSL2 Linux kernel and systemd support. In your **Windows terminal (PowerShell)**, run:
-```powershell
-wsl -l -v
-```
-If your distribution is version 1, upgrade it using:
-```powershell
-wsl --set-version <distro_name> 2
-```
-
-**"No supported acceleration hardware found"?**  
-For GPU passthrough to work, you must install the drivers on the **Windows host** first. 
-- **NVIDIA:** Install the latest "Game Ready" or "Studio" drivers on Windows.
-- **AMD:** Install "Adrenalin" or "PRO" drivers.
-- **Intel:** Install latest Arc/Graphics drivers.
-WSL2 will automatically map the hardware to `/dev/dxg`.
-
-**"Sudo access denied"?**  
-HLMagic needs to modify `/etc/wsl.conf` and install packages via `apt`. Ensure your WSL user is in the `sudo` group (standard for the default user).
-
-**Systemd warnings?**  
-HLMagic relies on systemd to manage Docker. If `hlmagic init` says systemd is enabled but not running, run `wsl --shutdown` in a Windows terminal (PowerShell) and restart your WSL instance.
-
-**Ollama model errors?**  
-The agent will try to `ollama pull` the configured model automatically. If this fails, ensure Ollama is running (`systemctl status ollama`) or pull the model manually: `ollama pull llama3`.
-
----
-
-## 🏗️ Technical Architecture
-
-- **CLI Framework:** [Typer](https://typer.tiangolo.com/) & [Rich](https://github.com/Textualize/rich)
-- **AI Integration:** [Ollama Python](https://github.com/ollama/ollama-python)
-- **Hardware Detection:** `lspci` Vendor ID mapping (`10de`, `1002`, `8086`)
-- **Config Standard:** All services are deployed to `/opt/hlmagic/services/` with a consistent `PUID/PGID` of `1000`.
+**"What is my password?"**
+This is the password you created in **Step 2**. The agent needs it to install software for you.
 
 ---
 
