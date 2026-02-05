@@ -51,14 +51,14 @@ class HardwareScanner:
         # 1. lspci Detection (Primary method)
         try:
             # -nn gets numeric IDs
-            lspci = subprocess.run(["lspci", "-nn"], capture_output=True, text=True)
-            output = lspci.stdout.lower()
+            lspci_nn = subprocess.run(["lspci", "-nn"], capture_output=True, text=True).stdout.lower()
+            lspci_raw = subprocess.run(["lspci"], capture_output=True, text=True).stdout.lower()
             
-            if "10de" in output: # NVIDIA Vendor ID
+            if "10de" in lspci_nn or "nvidia" in lspci_raw: # NVIDIA
                 detected.append(GPUVendor.NVIDIA)
-            if "1002" in output: # AMD Vendor ID
+            if "1002" in lspci_nn or any(x in lspci_raw for x in ["amd", "radeon", "navi", "advanced micro devices"]): # AMD
                 detected.append(GPUVendor.AMD)
-            if "8086" in output: # Intel Vendor ID
+            if "8086" in lspci_nn or "intel" in lspci_raw: # Intel
                  detected.append(GPUVendor.INTEL)
                      
         except FileNotFoundError:
