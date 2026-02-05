@@ -221,8 +221,9 @@ class HardwareScanner:
             
             if result.returncode != 0:
                 console.print("[yellow]amdgpu-install failed, attempting manual component installation...[/yellow]")
-                # Direct install of ROCm core
-                subprocess.run(["sudo", "apt-get", "install", "-y", "rocm-core", "rocm-smi-lib", "clinfo"], check=True)
+                # Direct install of ROCm core, runtime, and tools
+                pkgs = ["rocm-core", "rocm-smi-lib", "clinfo", "rocm-opencl-runtime", "hsa-rocr"]
+                subprocess.run(["sudo", "apt-get", "install", "-y"] + pkgs, check=True)
             
             # Cleanup
             if os.path.exists(deb_path):
