@@ -167,7 +167,8 @@ class HardwareScanner:
         user = os.getenv("USER")
         if not user:
             return
-        subprocess.run(["sudo", "usermod", "-aG", "render,video", user], capture_output=True)
+        # Use yes | to auto-confirm any potential prompt
+        subprocess.run(f"yes | sudo usermod -aG render,video {user}", shell=True, capture_output=True)
 
     def _install_nvidia(self):
         if shutil.which("nvidia-ctk"):
