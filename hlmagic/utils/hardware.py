@@ -220,18 +220,20 @@ class HardwareScanner:
             # Set non-interactive flags to prevent hanging on prompts
             env = os.environ.copy()
             env["DEBIAN_FRONTEND"] = "noninteractive"
+            env["UCF_FORCE_CONFFOLD"] = "1" 
             
-            # We removed capture_output=True so the user can see the progress/prompts if any
-            result = subprocess.run(
-                ["sudo", "-E", "amdgpu-install", "-y", "--usecase=rocm", "--no-dkms"], 
-                env=env
-            )
+            # We pipe 'yes' to the command to auto-answer any stray prompts
+            # and ensure the environment is passed through.
+            cmd = "yes | sudo -E amdgpu-install -y --usecase=rocm --no-dkms"
+            result = subprocess.run(cmd, shell=True, env=env)
             
             if result.returncode != 0:
                 console.print("[yellow]amdgpu-install failed, attempting manual component installation...[/yellow]")
                 # Direct install of ROCm core, runtime, and tools
                 pkgs = ["rocm-core", "rocm-smi-lib", "clinfo", "rocm-opencl-runtime", "hsa-rocr"]
-                subprocess.run(["sudo", "-E", "apt-get", "install", "-y", "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold"] + pkgs, env=env, check=True)
+                # Use --force-confold to prevent prompts about config file changes
+                apt_cmd = f"sudo -E apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold {' '.join(pkgs)}"
+                subprocess.run(apt_cmd, shell=True, env=env, check=True)
             
             # Cleanup
             if os.path.exists(deb_path):
