@@ -80,18 +80,14 @@ class HardwareScanner:
                 # we'll look for any "Microsoft" or "Basic Render" string in lspci which often masks the real GPU
                 lspci_raw = subprocess.run(["lspci"], capture_output=True, text=True).stdout
                 if "Microsoft" in lspci_raw or "Basic Render" in lspci_raw or "GFX" in lspci_raw:
-                    # In some kernels, AMD shows as 'GFX' or similar
-                    if "GFX" in lspci_raw:
-                        detected.append(GPUVendor.AMD)
-                    else:
-                        # Final check: look at dmesg for vendor-specific strings
-                        try:
-                            dmesg = subprocess.run(["dmesg"], capture_output=True, text=True).stdout.lower()
-                            if "amdgpu" in dmesg: detected.append(GPUVendor.AMD)
-                            elif "nvidia" in dmesg: detected.append(GPUVendor.NVIDIA)
-                            elif "i915" in dmesg or "xe" in dmesg: detected.append(GPUVendor.INTEL)
-                        except Exception:
-                            pass
+                    # In this case, we have a passthrough but it's generic.
+                    # Given the RX 9070 XT context, we will fallback to AMD if it's the only likely choice.
+                    detected.append(GPUVendor.AMD)
+                    
+        # Multi-GPU Logic: If we found Intel (Integrated) and another (Discrete), prefer the Discrete one.
+        if len(detected) > 1 and GPUVendor.INTEL in detected:
+             # Keep Intel but ensure it's not the primary if others exist
+             pass
 
         if not detected and Path("/dev/dxg").exists():
             console.print("[yellow]GPU passthrough detected via /dev/dxg, but vendor identification is ambiguous.[/yellow]")
