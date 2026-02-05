@@ -26,7 +26,8 @@ def _validate_service_name(name: str):
     """Ensure service name is alphanumeric and safe."""
     if not ALLOWED_SERVICE_NAME.match(name):
         raise SecurityViolation(f"Invalid service name: '{name}'. Must be alphanumeric with dashes/underscores.")
-    if ".." in name or "/" in name or "\\" in name:
+    # Using chr(92) for backslash to avoid any escaping issues in transit/tools
+    if ".." in name or "/" in name or chr(92) in name:
         raise SecurityViolation("Path traversal attempt detected in service name.")
 
 def _validate_compose_content(content: str):
