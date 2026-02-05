@@ -54,18 +54,17 @@ class HardwareScanner:
 
         # 2. lspci Detection
         try:
-            # -n to get numeric IDs, -n to avoid DNS lookups
-            lspci = subprocess.run(["lspci", "-nn"], capture_output=True, text=True)
-            output = lspci.stdout
+            # -d ::0300 filters for Display controllers (GPUs)
+            # -n gets numeric IDs
+            lspci = subprocess.run(["lspci", "-d", "::0300", "-nn"], capture_output=True, text=True)
+            output = lspci.stdout.lower()
             
-            if "10de:" in output: # NVIDIA Vendor ID
+            if "10de" in output: # NVIDIA Vendor ID
                 detected.append(GPUVendor.NVIDIA)
-            if "1002:" in output: # AMD Vendor ID
+            if "1002" in output: # AMD Vendor ID
                 detected.append(GPUVendor.AMD)
-            if "8086:" in output: # Intel Vendor ID (look for VGA/Display/3D/Graphics)
-                # Filter to ensure it's a GPU, not just a bridge
-                if any(x in output for x in ["VGA compatible controller", "Display controller", "3D controller"]) and "8086:" in output:
-                     detected.append(GPUVendor.INTEL)
+            if "8086" in output: # Intel Vendor ID
+                 detected.append(GPUVendor.INTEL)
                      
         except FileNotFoundError:
             console.print("[red]lspci not found. Install pciutils.[/red]")
