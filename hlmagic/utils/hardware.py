@@ -190,30 +190,39 @@ class HardwareScanner:
     def _install_amd(self):
         """Install AMD ROCm stack for WSL2."""
         if shutil.which("amdgpu-install"):
-            # If already installed, we might still need to run the usecase if it failed before
+            # Even if installed, ensure repositories are configured
             pass
 
-        # Noble (24.04) specific installer
-        deb_url = "https://repo.radeon.com/amdgpu-install/6.2/ubuntu/noble/amdgpu-install_6.2.60200-1_all.deb"
-        deb_path = "/tmp/amdgpu-install.deb"
-
         try:
+            # 1. Add ROCm Repository for Noble
+            # Official ROCm 6.2 guide steps for Ubuntu 24.04
+            cmds = [
+                "sudo mkdir -p /etc/apt/keyrings",
+                "curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/rocm.gpg",
+                "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2 noble main' | sudo tee /etc/apt/sources.list.d/rocm.list",
+                "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/amdgpu/6.2/ubuntu noble main' | sudo tee /etc/apt/sources.list.d/amdgpu.list",
+                "sudo apt-get update"
+            ]
+            for cmd in cmds:
+                subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+
+            # 2. Install the AMD GPU installer package if not present
+            deb_url = "https://repo.radeon.com/amdgpu-install/6.2/ubuntu/noble/amdgpu-install_6.2.60200-1_all.deb"
+            deb_path = "/tmp/amdgpu-install.deb"
+
             if not shutil.which("amdgpu-install"):
                 console.print("[yellow]Downloading AMD GPU installer...[/yellow]")
                 subprocess.run(["curl", "-L", deb_url, "-o", deb_path], check=True)
-                
-                console.print("[yellow]Installing AMD GPU installer package...[/yellow]")
                 subprocess.run(["sudo", "apt-get", "install", "-y", deb_path], check=True)
             
             console.print("[yellow]Running AMD GPU installation (ROCm usecase)...[/yellow]")
-            # We try 'rocm' first as it's more universal. 'wsl' sometimes points to missing packages on fresh Noble.
-            # --no-dkms is CRITICAL for WSL2
+            # Use 'rocm' usecase, --no-dkms is CRITICAL for WSL2
             result = subprocess.run(["sudo", "amdgpu-install", "-y", "--usecase=rocm", "--no-dkms"], capture_output=True, text=True)
             
             if result.returncode != 0:
-                console.print("[yellow]Primary ROCm install failed, attempting alternative components...[/yellow]")
-                # Manual install of core components if the wrapper fails
-                subprocess.run(["sudo", "apt-get", "install", "-y", "rocm-lib64", "rocm-smi-lib"], check=True)
+                console.print("[yellow]amdgpu-install failed, attempting manual component installation...[/yellow]")
+                # Direct install of ROCm core
+                subprocess.run(["sudo", "apt-get", "install", "-y", "rocm-core", "rocm-smi-lib", "clinfo"], check=True)
             
             # Cleanup
             if os.path.exists(deb_path):
