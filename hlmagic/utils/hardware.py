@@ -48,15 +48,10 @@ class HardwareScanner:
         self._ensure_dependencies()
         detected = []
         
-        # 1. Check /dev/dxg (WSL2 bridge)
-        if not Path("/dev/dxg").exists():
-            console.print("[yellow]Warning: /dev/dxg not found. GPU passthrough might not be working.[/yellow]")
-
-        # 2. lspci Detection
+        # 1. lspci Detection (Primary method)
         try:
-            # -d ::0300 filters for Display controllers (GPUs)
-            # -n gets numeric IDs
-            lspci = subprocess.run(["lspci", "-d", "::0300", "-nn"], capture_output=True, text=True)
+            # -nn gets numeric IDs
+            lspci = subprocess.run(["lspci", "-nn"], capture_output=True, text=True)
             output = lspci.stdout.lower()
             
             if "10de" in output: # NVIDIA Vendor ID
@@ -67,7 +62,39 @@ class HardwareScanner:
                  detected.append(GPUVendor.INTEL)
                      
         except FileNotFoundError:
-            console.print("[red]lspci not found. Install pciutils.[/red]")
+            pass
+
+        # 2. Check /dev/dxg (WSL2 bridge)
+        # If lspci failed to show the physical IDs (common in some WSL versions/kernels),
+        # but /dev/dxg exists, we have GPU passthrough.
+        if Path("/dev/dxg").exists() and not detected:
+            console.print("[blue]DirectX Graphics Link (/dev/dxg) detected. Identifying vendor via alternative means...[/blue]")
+            
+            # Try to find vendor via /proc/pal (AMD) or nvidia-smi
+            if Path("/proc/amdgpu").exists() or Path("/sys/module/amdgpu").exists():
+                detected.append(GPUVendor.AMD)
+            elif Path("/proc/driver/nvidia").exists() or shutil.which("nvidia-smi"):
+                detected.append(GPUVendor.NVIDIA)
+            else:
+                # If we have dxg but can't find specific drivers yet, 
+                # we'll look for any "Microsoft" or "Basic Render" string in lspci which often masks the real GPU
+                lspci_raw = subprocess.run(["lspci"], capture_output=True, text=True).stdout
+                if "Microsoft" in lspci_raw or "Basic Render" in lspci_raw or "GFX" in lspci_raw:
+                    # In some kernels, AMD shows as 'GFX' or similar
+                    if "GFX" in lspci_raw:
+                        detected.append(GPUVendor.AMD)
+                    else:
+                        # Final check: look at dmesg for vendor-specific strings
+                        try:
+                            dmesg = subprocess.run(["dmesg"], capture_output=True, text=True).stdout.lower()
+                            if "amdgpu" in dmesg: detected.append(GPUVendor.AMD)
+                            elif "nvidia" in dmesg: detected.append(GPUVendor.NVIDIA)
+                            elif "i915" in dmesg or "xe" in dmesg: detected.append(GPUVendor.INTEL)
+                        except Exception:
+                            pass
+
+        if not detected and Path("/dev/dxg").exists():
+            console.print("[yellow]GPU passthrough detected via /dev/dxg, but vendor identification is ambiguous.[/yellow]")
 
         self.gpus = list(set(detected))
         self._assign_roles()
