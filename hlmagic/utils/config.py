@@ -8,7 +8,7 @@ CONFIG_FILE = CONFIG_DIR / "config.toml"
 
 DEFAULT_CONFIG = {
     "brain": {
-        "model": "llama3",
+        "model": "llama3.1",
         "temperature": 0.1
     },
     "storage": {
@@ -40,7 +40,7 @@ def save_config(config: Dict[str, Any]):
     
     # Let's try to just use a simple string for the default.
     content = """[brain]
-model = "llama3"
+model = "llama3.1"
 temperature = 0.1
 
 [storage]
@@ -52,4 +52,4 @@ media_mounts = ["/mnt/d", "/mnt/e"]
 def get_model() -> str:
     """Get the configured AI model."""
     config = load_config()
-    return config.get("brain", {}).get("model", "llama3")
+    return config.get("brain", {}).get("model", "llama3.1")
