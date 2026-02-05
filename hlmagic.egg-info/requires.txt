@@ -1,4 +1,0 @@
-typer[all]
-rich
-ollama
-psutil
