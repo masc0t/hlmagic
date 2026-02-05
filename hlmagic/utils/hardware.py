@@ -190,25 +190,34 @@ class HardwareScanner:
     def _install_amd(self):
         """Install AMD ROCm stack for WSL2."""
         if shutil.which("amdgpu-install"):
-            return
+            # If already installed, we might still need to run the usecase if it failed before
+            pass
 
         # Noble (24.04) specific installer
         deb_url = "https://repo.radeon.com/amdgpu-install/6.2/ubuntu/noble/amdgpu-install_6.2.60200-1_all.deb"
         deb_path = "/tmp/amdgpu-install.deb"
 
         try:
-            console.print("[yellow]Downloading AMD GPU installer...[/yellow]")
-            subprocess.run(["curl", "-L", deb_url, "-o", deb_path], check=True)
+            if not shutil.which("amdgpu-install"):
+                console.print("[yellow]Downloading AMD GPU installer...[/yellow]")
+                subprocess.run(["curl", "-L", deb_url, "-o", deb_path], check=True)
+                
+                console.print("[yellow]Installing AMD GPU installer package...[/yellow]")
+                subprocess.run(["sudo", "apt-get", "install", "-y", deb_path], check=True)
             
-            console.print("[yellow]Installing AMD GPU installer package...[/yellow]")
-            subprocess.run(["sudo", "apt-get", "install", "-y", deb_path], check=True)
+            console.print("[yellow]Running AMD GPU installation (ROCm usecase)...[/yellow]")
+            # We try 'rocm' first as it's more universal. 'wsl' sometimes points to missing packages on fresh Noble.
+            # --no-dkms is CRITICAL for WSL2
+            result = subprocess.run(["sudo", "amdgpu-install", "-y", "--usecase=rocm", "--no-dkms"], capture_output=True, text=True)
             
-            console.print("[yellow]Running AMD GPU installation (ROCm/WSL usecase)...[/yellow]")
-            # --no-dkms is CRITICAL for WSL2 as we use the host kernel drivers
-            subprocess.run(["sudo", "amdgpu-install", "-y", "--usecase=wsl,rocm", "--no-dkms"], check=True)
+            if result.returncode != 0:
+                console.print("[yellow]Primary ROCm install failed, attempting alternative components...[/yellow]")
+                # Manual install of core components if the wrapper fails
+                subprocess.run(["sudo", "apt-get", "install", "-y", "rocm-lib64", "rocm-smi-lib"], check=True)
             
             # Cleanup
-            os.remove(deb_path)
+            if os.path.exists(deb_path):
+                os.remove(deb_path)
         except Exception as e:
             console.print(f"[red]Error installing AMD stack: {e}[/red]")
             return
