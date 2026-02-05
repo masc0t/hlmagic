@@ -12,9 +12,6 @@ class HLMagicAgent:
     def __init__(self, model: str = None):
         self.model = model or config.get_model()
         
-        # Ensure Ollama has the model
-        self._ensure_model()
-        
         # Get Hardware Context
         scanner = HardwareScanner()
         scanner.scan() # Detecting current state
@@ -58,6 +55,9 @@ class HLMagicAgent:
 
     def run(self, user_input: str):
         """Main loop for processing user requests with tool support."""
+        # Ensure Ollama has the model before running
+        self._ensure_model()
+
         messages = [
             {'role': 'system', 'content': self.system_prompt},
             {'role': 'user', 'content': user_input}
