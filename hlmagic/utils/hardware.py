@@ -291,10 +291,28 @@ class HardwareScanner:
                  console.print("[red]Validation Failed: nvidia-smi not found.[/red]")
 
         elif self.primary_gpu == GPUVendor.AMD:
-             if shutil.which("clinfo"): # or rocm-smi
-                 subprocess.run(["clinfo"], check=False)
+             # 1. Check for device nodes
+             kfd_exists = Path("/dev/kfd").exists()
+             dri_exists = Path("/dev/dri").exists()
+             
+             if not kfd_exists or not dri_exists:
+                 console.print("[bold yellow]Action Required: GPU nodes not found.[/bold yellow]")
+                 console.print("The drivers are installed, but WSL2 needs a full restart to map the hardware.")
+                 console.print("Please run [bold cyan]wsl --shutdown[/bold cyan] in PowerShell, then restart Ubuntu.")
+             
+             # 2. Check clinfo
+             if shutil.which("clinfo"):
+                 res = subprocess.run(["clinfo"], capture_output=True, text=True)
+                 if "Number of devices" in res.stdout:
+                     # Extract device count
+                     import re
+                     count_match = re.search(r"Number of devices\s+(\d+)", res.stdout)
+                     if count_match and int(count_match.group(1)) > 0:
+                         console.print(f"[green]✓ AMD GPU verified ({count_match.group(1)} device(s) found).[/green]")
+                     else:
+                         console.print("[yellow]! AMD Platform detected, but 0 devices found. Restart recommended.[/yellow]")
              else:
-                 console.print("[yellow]Validation: clinfo not found. Install 'clinfo' package to verify.[/yellow]")
+                 console.print("[yellow]Validation: clinfo not found.[/yellow]")
 
         elif self.primary_gpu == GPUVendor.INTEL:
              # Intel doesn't have a ubiquitous 'smi' tool installed by default, usually 'clinfo' works for OpenCL
