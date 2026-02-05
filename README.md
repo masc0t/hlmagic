@@ -33,7 +33,7 @@ sudo apt install -y python3-pip git
 ### Step 4: Install HLMagic
 Now, install the agent itself:
 ```bash
-pip install git+https://github.com/youruser/hlmagic.git --break-system-packages
+pip install git+https://github.com/masc0t/hlmagic.git --break-system-packages
 ```
 *(Note: We use --break-system-packages because this is a dedicated "Magic" environment just for your homelab!)*
 
