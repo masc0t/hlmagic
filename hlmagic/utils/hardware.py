@@ -22,8 +22,30 @@ class HardwareScanner:
         self.primary_gpu: GPUVendor = GPUVendor.NONE
         self.vram_split: Dict[str, str] = {} # e.g. {"OLLAMA_NUM_GPU": "..."}
 
+    def _ensure_dependencies(self):
+        """Ensure system tools like lspci, curl, and gnupg are installed."""
+        deps = {
+            "lspci": "pciutils",
+            "curl": "curl",
+            "gpg": "gnupg",
+            "clinfo": "clinfo"
+        }
+        
+        missing_pkgs = [pkg for cmd, pkg in deps.items() if not shutil.which(cmd)]
+        
+        if missing_pkgs:
+            console.print(f"[yellow]Missing dependencies: {', '.join(missing_pkgs)}. Installing...[/yellow]")
+            try:
+                # Update first if it's a fresh install
+                subprocess.run(["sudo", "apt-get", "update"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["sudo", "apt-get", "install", "-y"] + missing_pkgs, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                console.print(f"[green]✓ Installed {', '.join(missing_pkgs)}.[/green]")
+            except subprocess.CalledProcessError:
+                console.print(f"[red]Failed to install dependencies ({', '.join(missing_pkgs)}). Some features may fail.[/red]")
+
     def scan(self) -> List[GPUVendor]:
         """Detects available GPUs using Vendor IDs (lspci) and /dev/dxg."""
+        self._ensure_dependencies()
         detected = []
         
         # 1. Check /dev/dxg (WSL2 bridge)
@@ -144,29 +166,61 @@ class HardwareScanner:
         # We don't restart docker here, usually needs systemd restart or wsl restart
 
     def _install_amd(self):
-        # AMD Logic
-        # 1. Download/Install amdgpu-install (latest)
-        if not shutil.which("amdgpu-install"):
-            deb_url = "https://repo.radeon.com/amdgpu-install/6.0.2/ubuntu/jammy/amdgpu-install_6.0.60002-1_all.deb" # Example URL, normally we'd fetch latest for Noble
-            # Since 24.04 is new, we fallback to a known working generic or latest repo script
-            # For this exercise, we'll assume a generic setup or manual step if URL fails.
+        """Install AMD ROCm stack for WSL2."""
+        if shutil.which("amdgpu-install"):
+            return
+
+        # Noble (24.04) specific installer
+        deb_url = "https://repo.radeon.com/amdgpu-install/6.2/ubuntu/noble/amdgpu-install_6.2.60200-1_all.deb"
+        deb_path = "/tmp/amdgpu-install.deb"
+
+        try:
+            console.print("[yellow]Downloading AMD GPU installer...[/yellow]")
+            subprocess.run(["curl", "-L", deb_url, "-o", deb_path], check=True)
+            
+            console.print("[yellow]Installing AMD GPU installer package...[/yellow]")
+            subprocess.run(["sudo", "apt-get", "install", "-y", deb_path], check=True)
+            
+            console.print("[yellow]Running AMD GPU installation (ROCm/WSL usecase)...[/yellow]")
+            # --no-dkms is CRITICAL for WSL2 as we use the host kernel drivers
+            subprocess.run(["sudo", "amdgpu-install", "-y", "--usecase=wsl,rocm", "--no-dkms"], check=True)
+            
+            # Cleanup
+            os.remove(deb_path)
+        except Exception as e:
+            console.print(f"[red]Error installing AMD stack: {e}[/red]")
+            return
+
+        # 3. RDNA 4 Override Check (Hypothetical for GFX1200)
+        try:
+            lspci = subprocess.run(["lspci"], capture_output=True, text=True).stdout
+            if "Navi 4" in lspci or "GFX1200" in lspci: 
+                 self._append_to_bashrc("export HSA_OVERRIDE_GFX_VERSION=12.0.0")
+        except Exception:
             pass
 
-        # 2. Run Install
-        # --usecase=wsl,rocm --no-dkms -y
-        # subprocess.run(["sudo", "amdgpu-install", "--usecase=wsl,rocm", "--no-dkms", "-y"], check=True)
-        
-        # 3. RDNA 4 Override Check (Navi 4x detection in lspci)
-        lspci = subprocess.run(["lspci"], capture_output=True, text=True).stdout
-        if "Navi 4" in lspci or "GFX1200" in lspci: # Hypothetical string for RDNA 4
-             self._append_to_bashrc("export HSA_OVERRIDE_GFX_VERSION=12.0.0")
-
     def _install_intel(self):
-        # Intel Logic
-        # 1. Repo Setup (Intel Graphics)
-        # 2. Install packages
-        pkgs = ["intel-opencl-icd", "intel-level-zero-gpu", "intel-media-va-driver-non-free"]
-        subprocess.run(["sudo", "apt-get", "install", "-y"] + pkgs, capture_output=True)
+        """Install Intel Graphics stack for WSL2."""
+        # 1. Add Repository
+        cmds = [
+            "wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | sudo gpg --dearmor --yes -o /usr/share/keyrings/intel-graphics.gpg",
+            "echo 'deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu noble unified' | sudo tee /etc/apt/sources.list.d/intel.gpu.noble.list",
+            "sudo apt-get update"
+        ]
+        
+        # 2. Install Packages
+        pkgs = [
+            "intel-opencl-icd", "intel-level-zero-gpu", "intel-media-va-driver-non-free",
+            "libze-dev", "libvpl2", "libigdgmm12", "va-driver-all"
+        ]
+
+        try:
+            for cmd in cmds:
+                subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
+            
+            subprocess.run(["sudo", "apt-get", "install", "-y"] + pkgs, check=True, stdout=subprocess.DEVNULL)
+        except Exception as e:
+            console.print(f"[red]Error installing Intel stack: {e}[/red]")
 
     def _append_to_bashrc(self, line: str):
         bashrc = Path(os.path.expanduser("~/.bashrc"))

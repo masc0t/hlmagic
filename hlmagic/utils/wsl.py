@@ -25,26 +25,52 @@ def get_wsl_version() -> float:
         pass
     return 1.0
 
-def ensure_systemd():
-    """Ensure [boot] systemd=true is in /etc/wsl.conf"""
-    if not WSL_CONF_PATH.exists():
-        console.print("[yellow]Creating /etc/wsl.conf...[/yellow]")
-        content = "[boot]\nsystemd=true\n"
-        _write_wsl_conf(content)
-        return False # Needs restart
+def is_systemd_running() -> bool:
+    """Check if systemd is actually running as PID 1."""
+    try:
+        result = subprocess.run(["ps", "-p", "1", "-o", "comm="], capture_output=True, text=True)
+        return result.stdout.strip() == "systemd"
+    except Exception:
+        return False
 
-    content = WSL_CONF_PATH.read_text()
-    if "systemd=true" in content:
+def ensure_systemd():
+    """Ensure [boot] systemd=true is in /etc/wsl.conf and active."""
+    # 1. Check if it's already running
+    if is_systemd_running():
         return True
+
+    # 2. If not running, check if it's at least configured
+    if WSL_CONF_PATH.exists():
+        content = WSL_CONF_PATH.read_text()
+        if "systemd=true" in content:
+            # Configured but not running -> needs restart
+            return False
+
+    # 3. Not configured, let's configure it
+    console.print("[yellow]Systemd not enabled. Updating /etc/wsl.conf...[/yellow]")
     
-    console.print("[yellow]Updating /etc/wsl.conf to enable systemd...[/yellow]")
+    content = ""
+    if WSL_CONF_PATH.exists():
+        content = WSL_CONF_PATH.read_text()
+
     if "[boot]" in content:
-        content = content.replace("[boot]", "[boot]\nsystemd=true")
+        if "systemd=true" not in content:
+            content = content.replace("[boot]", "[boot]\nsystemd=true")
     else:
         content += "\n[boot]\nsystemd=true\n"
     
-    _write_wsl_conf(content)
+    _write_wsl_conf(content.strip() + "\n")
     return False # Needs restart
+
+def validate_sudo():
+    """Verify the user has sudo privileges and refresh the timestamp."""
+    try:
+        # -v (validate) refreshes the sudo timestamp. If it needs a password, 
+        # it will prompt the user in the terminal since we aren't capturing output.
+        subprocess.run(["sudo", "-v"], check=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 def _write_wsl_conf(content: str):
     """Write to /etc/wsl.conf, requires sudo."""

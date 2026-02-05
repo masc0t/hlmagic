@@ -1,15 +1,19 @@
 import ollama
 import json
+import subprocess
 from typing import List, Dict, Any
 from rich.console import Console
-from hlmagic.utils import tools
+from hlmagic.utils import tools, config
 from hlmagic.utils.hardware import HardwareScanner
 
 console = Console()
 
 class HLMagicAgent:
-    def __init__(self, model: str = "llama3"):
-        self.model = model
+    def __init__(self, model: str = None):
+        self.model = model or config.get_model()
+        
+        # Ensure Ollama has the model
+        self._ensure_model()
         
         # Get Hardware Context
         scanner = HardwareScanner()
@@ -34,6 +38,23 @@ class HLMagicAgent:
             "check_service_status": tools.check_service_status,
             "get_optimized_template": tools.get_optimized_template
         }
+
+    def _ensure_model(self):
+        """Check if model exists in Ollama, pull if missing."""
+        try:
+            models = ollama.list()
+            model_names = [m['name'] for m in models.get('models', [])]
+            
+            target = self.model
+            if ":" not in target:
+                target += ":latest"
+            
+            if target not in model_names and self.model not in model_names:
+                console.print(f"[yellow]Model '{self.model}' not found. Pulling...[/yellow]")
+                subprocess.run(["ollama", "pull", self.model], check=True)
+                console.print(f"[green]✓ Model '{self.model}' pulled.[/green]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not verify/pull model '{self.model}': {e}[/yellow]")
 
     def run(self, user_input: str):
         """Main loop for processing user requests with tool support."""

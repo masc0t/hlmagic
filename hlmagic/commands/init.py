@@ -11,6 +11,11 @@ def init():
     """Verify WSL2 sanity and initialize HLMagic environment."""
     console.print("[bold blue]HLMagic Initializing...[/bold blue]")
 
+    # 0. Validate Sudo Access Upfront
+    if not wsl.validate_sudo():
+        console.print("[red]Error: HLMagic requires sudo privileges to configure WSL and install drivers.[/red]")
+        raise typer.Exit(code=1)
+
     if not wsl.is_wsl():
         console.print("[red]Error: HLMagic must be run inside WSL2 (Ubuntu).[/red]")
         raise typer.Exit(code=1)
