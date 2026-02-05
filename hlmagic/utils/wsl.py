@@ -99,6 +99,16 @@ def start_ollama_service():
         console.print(f"[red]Error starting Ollama: {e}[/red]")
         return False
 
+def pull_model(model_name: str):
+    """Pull the specified model using Ollama."""
+    console.print(f"[yellow]Pulling AI model '{model_name}' (this may take a few minutes)...[/yellow]")
+    try:
+        subprocess.run(["ollama", "pull", model_name], check=True)
+        return True
+    except Exception as e:
+        console.print(f"[red]Error pulling model: {e}[/red]")
+        return False
+
 def _write_wsl_conf(content: str):
     """Write to /etc/wsl.conf, requires sudo."""
     try:

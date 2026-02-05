@@ -1,6 +1,6 @@
 import typer
 from rich.console import Console
-from hlmagic.utils import wsl
+from hlmagic.utils import wsl, config
 from hlmagic.utils.hardware import HardwareScanner
 
 app = typer.Typer()
@@ -65,6 +65,9 @@ def init():
     console.print("\n[bold]Phase 3: AI Engine Setup[/bold]")
     if wsl.install_ollama():
         wsl.start_ollama_service()
+        # Ensure the model is pulled
+        target_model = config.get_model()
+        wsl.pull_model(target_model)
         console.print("[green]✓ Ollama AI Engine is ready.[/green]")
 
     console.print("\n[bold green]HLMagic Environment Ready![/bold green]")
