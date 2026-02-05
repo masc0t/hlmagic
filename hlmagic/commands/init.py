@@ -63,6 +63,10 @@ def init():
 
     # 4. Ollama Setup
     console.print("\n[bold]Phase 3: AI Engine Setup[/bold]")
+    
+    # Ensure zstd is installed (required by Ollama installer)
+    subprocess.run(["sudo", "apt-get", "install", "-y", "zstd"], check=False)
+
     if wsl.install_ollama():
         wsl.start_ollama_service()
         # Ensure the model is pulled
