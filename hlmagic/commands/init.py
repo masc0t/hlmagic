@@ -61,6 +61,12 @@ def init():
     else:
         console.print("[yellow]! No supported acceleration hardware found. Running in CPU-only mode.[/yellow]")
 
+    # 4. Ollama Setup
+    console.print("\n[bold]Phase 3: AI Engine Setup[/bold]")
+    if wsl.install_ollama():
+        wsl.start_ollama_service()
+        console.print("[green]✓ Ollama AI Engine is ready.[/green]")
+
     console.print("\n[bold green]HLMagic Environment Ready![/bold green]")
 
 if __name__ == "__main__":

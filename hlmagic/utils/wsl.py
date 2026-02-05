@@ -72,6 +72,33 @@ def validate_sudo():
     except subprocess.CalledProcessError:
         return False
 
+def install_ollama():
+    """Install Ollama using the official installer script."""
+    if subprocess.run(["which", "ollama"], capture_output=True).returncode == 0:
+        console.print("[green]✓ Ollama is already installed.[/green]")
+        return True
+
+    console.print("[yellow]Installing Ollama...[/yellow]")
+    try:
+        # Run the official install script
+        cmd = "curl -fsSL https://ollama.com/install.sh | sh"
+        subprocess.run(["bash", "-c", cmd], check=True)
+        return True
+    except Exception as e:
+        console.print(f"[red]Error installing Ollama: {e}[/red]")
+        return False
+
+def start_ollama_service():
+    """Enable and start the ollama systemd service."""
+    try:
+        console.print("[yellow]Starting Ollama service...[/yellow]")
+        subprocess.run(["sudo", "systemctl", "enable", "ollama"], check=True)
+        subprocess.run(["sudo", "systemctl", "start", "ollama"], check=True)
+        return True
+    except Exception as e:
+        console.print(f"[red]Error starting Ollama: {e}[/red]")
+        return False
+
 def _write_wsl_conf(content: str):
     """Write to /etc/wsl.conf, requires sudo."""
     try:
