@@ -37,6 +37,11 @@ pip install git+https://github.com/masc0t/hlmagic.git --break-system-packages
 ```
 *(Note: We use --break-system-packages because this is a dedicated "Magic" environment just for your homelab!)*
 
+**Run this line to make sure the "hlmagic" command works:**
+```bash
+export PATH=$PATH:~/.local/bin
+```
+
 ### Step 5: The "Magic" Initialization
 Run this command to let the agent scan your computer and install your video card drivers automatically:
 ```bash
