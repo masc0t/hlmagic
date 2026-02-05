@@ -1,13 +1,13 @@
 import typer
 from typing import Optional
 from rich.console import Console
-from hlmagic.commands import init
+from hlmagic.commands.init import init
 
 app = typer.Typer(help="HLMagic: Your Local Homelab Agent.")
 console = Console()
 
-# Add subcommands
-app.add_typer(init.app, name="init")
+# Add commands
+app.command()(init)
 
 @app.command()
 def run(prompt: str):
@@ -82,19 +82,14 @@ def purge():
     
     console.print("[green]✓ HLMagic has been purged.[/green]")
 
-@app.callback(invoke_without_command=True)
-def main(ctx: typer.Context, prompt: Optional[str] = typer.Argument(None)):
+@app.callback()
+def main(ctx: typer.Context):
     """
     HLMagic: Autonomous WSL2 Homelab Agent. 
-    
-    If a prompt is provided without a command, it defaults to 'run'.
     """
-    if ctx.invoked_subcommand is None and prompt:
-        from hlmagic.utils.agent import HLMagicAgent
-        agent = HLMagicAgent()
-        agent.run(prompt)
-    elif ctx.invoked_subcommand is None:
-        print(ctx.get_help())
+    if ctx.invoked_subcommand is None:
+        console.print(ctx.get_help())
+        raise typer.Exit()
 
 if __name__ == "__main__":
     app()
