@@ -1,0 +1,17 @@
+[project]
+name = "hlmagic"
+version = "0.1.0"
+description = "Autonomous, local-AI Homelab Agent for WSL2"
+dependencies = [
+    "typer[all]",
+    "rich",
+    "ollama",
+    "psutil"
+]
+
+[project.scripts]
+hlmagic = "hlmagic.main:app"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
