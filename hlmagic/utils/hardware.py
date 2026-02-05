@@ -217,23 +217,21 @@ class HardwareScanner:
                 subprocess.run(["sudo", "apt-get", "install", "-y", deb_path], check=True)
             
             console.print("[yellow]Running AMD GPU installation (ROCm usecase)...[/yellow]")
-            # Use 'rocm' usecase, --no-dkms is CRITICAL for WSL2
-            # Set non-interactive flags to prevent hanging on prompts
+            console.print("[dim]Log: /tmp/hlmagic_amd_install.log[/dim]")
+            
             env = os.environ.copy()
             env["DEBIAN_FRONTEND"] = "noninteractive"
             env["UCF_FORCE_CONFFOLD"] = "1" 
             
-            # We pipe 'yes' to the command to auto-answer any stray prompts
-            # and ensure the environment is passed through.
-            cmd = "yes | sudo -E amdgpu-install -y --usecase=rocm --no-dkms"
+            # Use -E to pass environment, redirect all output to log file
+            log_file = "/tmp/hlmagic_amd_install.log"
+            cmd = f"yes | sudo -E amdgpu-install -y --usecase=rocm --no-dkms > {log_file} 2>&1"
             result = subprocess.run(cmd, shell=True, env=env)
             
             if result.returncode != 0:
                 console.print("[yellow]amdgpu-install failed, attempting manual component installation...[/yellow]")
-                # Direct install of ROCm core, runtime, and tools
                 pkgs = ["rocm-core", "rocm-smi-lib", "clinfo", "rocm-opencl-runtime", "hsa-rocr"]
-                # Use --force-confold to prevent prompts about config file changes
-                apt_cmd = f"sudo -E apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold {' '.join(pkgs)}"
+                apt_cmd = f"sudo -E apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold {' '.join(pkgs)} >> {log_file} 2>&1"
                 subprocess.run(apt_cmd, shell=True, env=env, check=True)
             
             # Cleanup
