@@ -12,7 +12,7 @@
 ## Phase 3: AI & Configuration (DONE ✅)
 - [x] **Configurable AI Model**: `~/.hlmagic/config.toml` support added.
 - [x] **Model Puller**: Auto-pulls missing Ollama models.
-- [ ] **Template Injection**: (Next Step) Improve injection to be more deterministic.
+- [x] **Template Injection**: (Next Step) Improve injection to be more deterministic.
 
 ## Phase 4: Quality Assurance & Safety (DONE ✅)
 - [x] **Test Suite**: Security and Template tests created.
@@ -20,4 +20,4 @@
 - [x] **Uninstall/Cleanup**: `hlmagic purge` implemented.
 
 ## Phase 5: Documentation
-- [ ] Update `README.md` with a "Troubleshooting" section for common Fresh Install issues.
+- [x] Update `README.md` with a "Troubleshooting" section for common Fresh Install issues.

@@ -72,8 +72,25 @@ base_path = "/opt/hlmagic"
 
 ## ❓ Troubleshooting
 
-**"lspci not found" or missing dependencies?**  
-`hlmagic init` will attempt to auto-install `pciutils`, `curl`, and `gnupg`. Ensure you have internet access and sudo privileges.
+**"Error: HLMagic must be run inside WSL2" or "Found WSL1"?**  
+HLMagic requires the WSL2 Linux kernel and systemd support. In your **Windows terminal (PowerShell)**, run:
+```powershell
+wsl -l -v
+```
+If your distribution is version 1, upgrade it using:
+```powershell
+wsl --set-version <distro_name> 2
+```
+
+**"No supported acceleration hardware found"?**  
+For GPU passthrough to work, you must install the drivers on the **Windows host** first. 
+- **NVIDIA:** Install the latest "Game Ready" or "Studio" drivers on Windows.
+- **AMD:** Install "Adrenalin" or "PRO" drivers.
+- **Intel:** Install latest Arc/Graphics drivers.
+WSL2 will automatically map the hardware to `/dev/dxg`.
+
+**"Sudo access denied"?**  
+HLMagic needs to modify `/etc/wsl.conf` and install packages via `apt`. Ensure your WSL user is in the `sudo` group (standard for the default user).
 
 **Systemd warnings?**  
 HLMagic relies on systemd to manage Docker. If `hlmagic init` says systemd is enabled but not running, run `wsl --shutdown` in a Windows terminal (PowerShell) and restart your WSL instance.

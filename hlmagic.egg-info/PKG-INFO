@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: hlmagic
+Version: 0.1.0
+Summary: Autonomous, local-AI Homelab Agent for WSL2
+Requires-Dist: typer[all]
+Requires-Dist: rich
+Requires-Dist: ollama
+Requires-Dist: psutil
