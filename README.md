@@ -20,20 +20,24 @@ Ensure you have a modern Graphics Card (GPU) from **NVIDIA**, **AMD**, or **Inte
    ```powershell
    wsl --install -d Ubuntu-24.04
    ```
-4. **Restart your computer** when it finishes.
-
-### Step 2: Open your New Linux Terminal
-1. After restarting, click the **Start Menu** and type `Ubuntu`. Open the app.
-2. It will ask you to create a **Username** and **Password**. 
+4. It will ask you to create a **Username** and **Password**. 
    * *Note: When typing your password, you won't see any dots or stars. This is normal! Just type it and hit Enter.*
 
-### Step 3: Install HLMagic
-In that same Ubuntu window, copy and paste this single line and press Enter:
+### Step 3: Prepare your Linux system
+Copy and paste these two lines (one at a time) and press Enter. This installs the tools needed to run the agent.
 ```bash
-pip install git+https://github.com/youruser/hlmagic.git
+sudo apt update
+sudo apt install -y python3-pip git
 ```
 
-### Step 4: The "Magic" Initialization
+### Step 4: Install HLMagic
+Now, install the agent itself:
+```bash
+pip install git+https://github.com/youruser/hlmagic.git --break-system-packages
+```
+*(Note: We use --break-system-packages because this is a dedicated "Magic" environment just for your homelab!)*
+
+### Step 5: The "Magic" Initialization
 Run this command to let the agent scan your computer and install your video card drivers automatically:
 ```bash
 hlmagic init
