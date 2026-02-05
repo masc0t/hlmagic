@@ -74,25 +74,66 @@ def validate_sudo():
 
 def install_ollama():
     """Install Ollama using the official installer script."""
-    if subprocess.run(["which", "ollama"], capture_output=True).returncode == 0:
-        console.print("[green]✓ Ollama is already installed.[/green]")
-        return True
+    # Ensure dependencies are present
+    subprocess.run(["sudo", "apt-get", "install", "-y", "zstd", "curl"], check=False)
 
-    console.print("[yellow]Installing Ollama...[/yellow]")
+    if subprocess.run(["which", "ollama"], capture_output=True).returncode == 0:
+        console.print("[green]✓ Ollama binary detected.[/green]")
+    else:
+        console.print("[yellow]Installing Ollama via official script...[/yellow]")
+        try:
+            cmd = "curl -fsSL https://ollama.com/install.sh | sh"
+            subprocess.run(["bash", "-c", cmd], check=True)
+        except Exception as e:
+            console.print(f"[red]Error installing Ollama: {e}[/red]")
+            return False
+
+    return setup_ollama_service()
+
+def setup_ollama_service():
+    """Configure Ollama as a startup service (Official Recommended Method)."""
     try:
-        # Run the official install script
-        cmd = "curl -fsSL https://ollama.com/install.sh | sh"
-        subprocess.run(["bash", "-c", cmd], check=True)
+        console.print("[yellow]Configuring Ollama service...[/yellow]")
+        
+        # 1. Create user and group
+        # We use check=False because they might already exist
+        subprocess.run(["sudo", "useradd", "-r", "-s", "/bin/false", "-U", "-m", "-d", "/usr/share/ollama", "ollama"], capture_output=True)
+        subprocess.run(["sudo", "usermod", "-a", "-G", "ollama", os.environ.get("USER", "ubuntu")], capture_output=True)
+
+        # 2. Create service file
+        service_content = """[Unit]
+Description=Ollama Service
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+Environment="PATH=$PATH"
+Environment="OLLAMA_HOST=0.0.0.0"
+
+[Install]
+WantedBy=multi-user.target
+"""
+        service_path = "/etc/systemd/system/ollama.service"
+        # Write using sudo tee
+        process = subprocess.Popen(['sudo', 'tee', service_path], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        process.communicate(input=service_content)
+
+        # 3. Reload and Enable
+        subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
+        subprocess.run(["sudo", "systemctl", "enable", "ollama"], check=True)
         return True
     except Exception as e:
-        console.print(f"[red]Error installing Ollama: {e}[/red]")
+        console.print(f"[red]Error configuring Ollama service: {e}[/red]")
         return False
 
 def start_ollama_service():
-    """Enable and start the ollama systemd service."""
+    """Start the ollama systemd service."""
     try:
         console.print("[yellow]Starting Ollama service...[/yellow]")
-        subprocess.run(["sudo", "systemctl", "enable", "ollama"], check=True)
         subprocess.run(["sudo", "systemctl", "start", "ollama"], check=True)
         return True
     except Exception as e:
