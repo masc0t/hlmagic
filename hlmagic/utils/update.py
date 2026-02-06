@@ -59,6 +59,7 @@ def restart_server():
     """Restart the current process to apply updates."""
     import sys
     import os
+    print("Restart: Server process is restarting NOW...")
     console.print("[yellow]Restarting HLMagic server...[/yellow]")
     # This will replace the current process with a new one
     # If running via nohup or systemd, this works perfectly.
@@ -67,23 +68,30 @@ def restart_server():
 def apply_update():
     """Pull the latest changes and reinstall dependencies."""
     if not REPO_PATH.exists():
+        print(f"Update error: REPO_PATH {REPO_PATH} does not exist.")
         return False, "Repository not found."
 
     try:
         console.print("[yellow]Updating HLMagic code...[/yellow]")
+        print("Update: Running git fetch...")
+        subprocess.run(["git", "fetch"], cwd=REPO_PATH, check=True, capture_output=True)
         
-        # Pull latest
+        print("Update: Running git pull...")
         subprocess.run(["git", "pull", "origin", "main"], cwd=REPO_PATH, check=True, capture_output=True)
         
         # Re-install in editable mode to update dependencies
         venv_pip = Path("/opt/hlmagic/venv/bin/pip")
+        print(f"Update: Re-installing via {venv_pip if venv_pip.exists() else 'pip'}...")
         if venv_pip.exists():
             subprocess.run([str(venv_pip), "install", "-e", "."], cwd=REPO_PATH, check=True, capture_output=True)
         else:
             subprocess.run(["pip", "install", "-e", "."], cwd=REPO_PATH, check=True, capture_output=True)
             
         console.print("[green]✓ HLMagic update applied to disk.[/green]")
+        print("Update: Successfully applied to disk.")
         return True, "Update applied successfully. Server will restart in a moment."
     except Exception as e:
-        console.print(f"[red]Error applying update: {e}[/red]")
-        return False, f"Update failed: {e}"
+        error_msg = f"Update failed: {e}"
+        console.print(f"[red]{error_msg}[/red]")
+        print(error_msg)
+        return False, error_msg

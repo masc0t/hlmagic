@@ -17,6 +17,9 @@ DEFAULT_CONFIG = {
     },
     "auth": {
         "password": ""
+    },
+    "system": {
+        "debug": False
     }
 }
 
@@ -45,8 +48,24 @@ media_mounts = {config['storage']['media_mounts']}
 
 [auth]
 password = "{config.get('auth', {}).get('password', '')}"
+
+[system]
+debug = {str(config.get('system', {}).get('debug', False)).lower()}
 """
     CONFIG_FILE.write_text(content)
+
+def get_debug_mode() -> bool:
+    """Check if debug mode is enabled."""
+    config = load_config()
+    return config.get("system", {}).get("debug", False)
+
+def set_debug_mode(enabled: bool):
+    """Set debug mode in config."""
+    config = load_config()
+    if "system" not in config:
+        config["system"] = {}
+    config["system"]["debug"] = enabled
+    save_config(config)
 
 def get_password() -> str:
     """Get the configured access password."""

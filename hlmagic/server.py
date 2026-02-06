@@ -6,8 +6,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from hlmagic.utils.agent import HLMagicAgent
 from hlmagic.utils.hardware import HardwareScanner
-from hlmagic.utils.update import check_for_updates, apply_update, get_current_version, get_version_info
-from hlmagic.utils.config import get_password, set_password
+from hlmagic.utils.update import check_for_updates, apply_update, get_current_version, get_version_info, restart_server
+from hlmagic.utils.config import get_password, set_password, get_debug_mode, set_debug_mode
 import threading
 import time
 
@@ -16,21 +16,37 @@ app = FastAPI(title="HLMagic Web Interface")
 # Shared Agent Instance
 agent = HLMagicAgent()
 
+def debug_log(msg: str):
+    """Log to console and file if debug mode is enabled."""
+    if get_debug_mode():
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] DEBUG: {msg}"
+        print(formatted)
+        try:
+            # Note: /opt/hlmagic/server.log is where we redirect stdout/stderr in install.ps1
+            with open("/opt/hlmagic/server.log", "a") as f:
+                f.write(formatted + "\n")
+        except: pass
+
 def auto_update_loop():
     """Background task to automatically check and apply updates."""
     # Wait for startup
     time.sleep(60)
     while True:
         try:
+            debug_log("Auto-update check starting...")
             available, _ = check_for_updates()
             if available:
-                print("Automatic Update: New version found. Applying...")
+                debug_log("Automatic Update: New version found. Applying...")
                 from hlmagic.utils.update import apply_update, restart_server
                 success, _ = apply_update()
                 if success:
+                    debug_log("Update applied. Scheduling restart in 5s.")
                     threading.Timer(5.0, restart_server).start()
+            else:
+                debug_log("Auto-update check: No updates found.")
         except Exception as e:
-            print(f"Auto-update error: {e}")
+            debug_log(f"Auto-update error: {e}")
         # Check every hour
         time.sleep(3600)
 
@@ -222,6 +238,34 @@ async def system_status(authenticated: bool = Depends(is_authenticated)):
         }
     }
 
+@app.get("/settings")
+async def get_settings(authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
+    return {
+        "debug": get_debug_mode(),
+        "version": get_current_version()
+    }
+
+@app.post("/settings/debug/{enabled}")
+async def toggle_debug(enabled: bool, authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
+    set_debug_mode(enabled)
+    debug_log(f"Debug mode set to: {enabled}")
+    return {"success": True, "debug": enabled}
+
+@app.get("/logs")
+async def get_logs(authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
+    try:
+        if os.path.exists("/opt/hlmagic/server.log"):
+            with open("/opt/hlmagic/server.log", "r") as f:
+                # Return last 200 lines
+                lines = f.readlines()
+                return {"logs": "".join(lines[-200:])}
+        return {"logs": "Log file not found."}
+    except Exception as e:
+        return {"logs": f"Error reading logs: {e}"}
+
 @app.post("/service/{name}/{action}")
 async def manage_service(name: str, action: str, authenticated: bool = Depends(is_authenticated)):
     if not authenticated: raise HTTPException(status_code=401)
@@ -271,6 +315,7 @@ async def index(hl_token: str = Cookie(None)):
                     <nav class="flex space-x-1 bg-gray-800 p-1 rounded-xl">
                         <button onclick="showTab('chat')" id="tab-chat" class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors bg-blue-600 text-white">Chat</button>
                         <button onclick="showTab('dashboard')" id="tab-dashboard" class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-400 hover:text-white">Dashboard</button>
+                        <button onclick="showTab('settings')" id="tab-settings" class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-400 hover:text-white">Settings</button>
                     </nav>
                 </div>
                 <div class="flex items-center space-x-3">
@@ -325,6 +370,34 @@ async def index(hl_token: str = Cookie(None)):
                 </section>
             </main>
 
+            <main id="settings-view" class="hidden flex-1 overflow-y-auto py-6 space-y-8">
+                <section class="max-w-2xl">
+                    <h2 class="text-lg font-bold mb-4 flex items-center"><span class="mr-2">⚙️</span> System Settings</h2>
+                    <div class="bg-gray-800 rounded-2xl p-6 border border-gray-700 space-y-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold">Full Debug Mode</h3>
+                                <p class="text-xs text-gray-400">Enable verbose logging to help diagnose update and restart issues.</p>
+                            </div>
+                            <button id="debug-toggle" onclick="toggleDebug()" class="px-4 py-2 rounded-xl text-xs font-bold transition-colors bg-gray-700 text-white">
+                                Disabled
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <h2 class="text-lg font-bold mb-4 flex items-center"><span class="mr-2">📜</span> System Logs</h2>
+                    <div class="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+                        <div class="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
+                            <span class="text-xs font-mono text-gray-400">/opt/hlmagic/server.log</span>
+                            <button onclick="refreshLogs()" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">Refresh</button>
+                        </div>
+                        <pre id="log-viewer" class="p-4 text-[10px] font-mono text-gray-300 overflow-x-auto h-96 overflow-y-auto whitespace-pre-wrap">Loading logs...</pre>
+                    </div>
+                </section>
+            </main>
+
             <footer id="chat-footer" class="py-4">
                 <form id="chat-form" class="relative">
                     <input type="text" id="user-input" 
@@ -342,9 +415,11 @@ async def index(hl_token: str = Cookie(None)):
         <script>
             const chatView = document.getElementById('chat-view');
             const dashboardView = document.getElementById('dashboard-view');
+            const settingsView = document.getElementById('settings-view');
             const chatFooter = document.getElementById('chat-footer');
             const tabChat = document.getElementById('tab-chat');
             const tabDashboard = document.getElementById('tab-dashboard');
+            const tabSettings = document.getElementById('tab-settings');
 
             const chatForm = document.getElementById('chat-form');
             const userInput = document.getElementById('user-input');
@@ -353,23 +428,64 @@ async def index(hl_token: str = Cookie(None)):
             const versionDate = document.getElementById('version-date');
 
             function showTab(tab) {
+                [chatView, dashboardView, settingsView, chatFooter].forEach(v => v.classList.add('hidden'));
+                [tabChat, tabDashboard, tabSettings].forEach(t => {
+                    t.classList.remove('bg-blue-600', 'text-white');
+                    t.classList.add('text-gray-400');
+                });
+
                 if (tab === 'chat') {
                     chatView.classList.remove('hidden');
                     chatFooter.classList.remove('hidden');
-                    dashboardView.classList.add('hidden');
                     tabChat.classList.add('bg-blue-600', 'text-white');
                     tabChat.classList.remove('text-gray-400');
-                    tabDashboard.classList.remove('bg-blue-600', 'text-white');
-                    tabDashboard.classList.add('text-gray-400');
-                } else {
-                    chatView.classList.add('hidden');
-                    chatFooter.classList.add('hidden');
+                } else if (tab === 'dashboard') {
                     dashboardView.classList.remove('hidden');
                     tabDashboard.classList.add('bg-blue-600', 'text-white');
                     tabDashboard.classList.remove('text-gray-400');
-                    tabChat.classList.remove('bg-blue-600', 'text-white');
-                    tabChat.classList.add('text-gray-400');
                     refreshDashboard();
+                } else if (tab === 'settings') {
+                    settingsView.classList.remove('hidden');
+                    tabSettings.classList.add('bg-blue-600', 'text-white');
+                    tabSettings.classList.remove('text-gray-400');
+                    refreshSettings();
+                    refreshLogs();
+                }
+            }
+
+            async function refreshSettings() {
+                try {
+                    const res = await fetch('/settings');
+                    const data = await res.json();
+                    const btn = document.getElementById('debug-toggle');
+                    if (data.debug) {
+                        btn.innerText = "Enabled";
+                        btn.classList.replace('bg-gray-700', 'bg-blue-600');
+                    } else {
+                        btn.innerText = "Disabled";
+                        btn.classList.replace('bg-blue-600', 'bg-gray-700');
+                    }
+                } catch (e) {}
+            }
+
+            async function toggleDebug() {
+                const btn = document.getElementById('debug-toggle');
+                const currentlyEnabled = btn.innerText === "Enabled";
+                try {
+                    await fetch(`/settings/debug/${!currentlyEnabled}`, { method: 'POST' });
+                    refreshSettings();
+                } catch (e) {}
+            }
+
+            async function refreshLogs() {
+                const viewer = document.getElementById('log-viewer');
+                try {
+                    const res = await fetch('/logs');
+                    const data = await res.json();
+                    viewer.innerText = data.logs;
+                    viewer.scrollTop = viewer.scrollHeight;
+                } catch (e) {
+                    viewer.innerText = "Error loading logs.";
                 }
             }
 
