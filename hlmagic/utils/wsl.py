@@ -123,6 +123,7 @@ def setup_ollama_service():
         subprocess.run(["sudo", "usermod", "-a", "-G", "ollama", os.environ.get("USER", "ubuntu")], capture_output=True)
 
         # 2. Create service file
+        # We include HSA_OVERRIDE_GFX_VERSION for RDNA 3/4 support
         service_content = """[Unit]
 Description=Ollama Service
 After=network-online.target
@@ -135,6 +136,7 @@ Restart=always
 RestartSec=3
 Environment="PATH=$PATH"
 Environment="OLLAMA_HOST=0.0.0.0"
+Environment="HSA_OVERRIDE_GFX_VERSION=12.0.0"
 
 [Install]
 WantedBy=multi-user.target

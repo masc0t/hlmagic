@@ -195,42 +195,41 @@ class HardwareScanner:
     def _install_amd(self):
         """Install AMD ROCm stack for WSL2."""
         try:
-            # 1. Add ROCm Repository for Noble
-            # Added --yes to gpg to prevent overwrite prompts
+            # 1. Add ROCm Repository for Noble (Ubuntu 24.04)
             cmds = [
                 "sudo mkdir -p /etc/apt/keyrings",
                 "curl -fsSL https://repo.radeon.com/rocm/rocm.gpg.key | sudo gpg --dearmor --yes -o /etc/apt/keyrings/rocm.gpg",
-                "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2 noble main' | sudo tee /etc/apt/sources.list.d/rocm.list",
-                "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/amdgpu/6.2/ubuntu noble main' | sudo tee /etc/apt/sources.list.d/amdgpu.list",
+                "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/7.2 noble main' | sudo tee /etc/apt/sources.list.d/rocm.list",
+                "echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/amdgpu/30.30/ubuntu noble main' | sudo tee /etc/apt/sources.list.d/amdgpu.list",
                 "sudo apt-get update"
             ]
             for cmd in cmds:
                 subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
 
-            # 2. Install the AMD GPU installer package if not present
-            deb_url = "https://repo.radeon.com/amdgpu-install/6.2/ubuntu/noble/amdgpu-install_6.2.60200-1_all.deb"
+            # 2. Install the AMD GPU installer package if not present (ROCm 7.2)
+            deb_url = "https://repo.radeon.com/amdgpu-install/7.2/ubuntu/noble/amdgpu-install_7.2.70200-1_all.deb"
             deb_path = "/tmp/amdgpu-install.deb"
 
             if not shutil.which("amdgpu-install"):
-                console.print("[yellow]Downloading AMD GPU installer...[/yellow]")
+                console.print("[yellow]Downloading AMD GPU installer (v7.2)...[/yellow]")
                 subprocess.run(["curl", "-L", deb_url, "-o", deb_path], check=True)
                 subprocess.run(["sudo", "apt-get", "install", "-y", deb_path], check=True)
             
-            console.print("[yellow]Running AMD GPU installation (ROCm usecase)...[/yellow]")
+            console.print("[yellow]Running AMD GPU installation (WSL + ROCm usecase)...[/yellow]")
             console.print("[dim]Log: /tmp/hlmagic_amd_install.log[/dim]")
             
             env = os.environ.copy()
             env["DEBIAN_FRONTEND"] = "noninteractive"
             env["UCF_FORCE_CONFFOLD"] = "1" 
             
-            # Use -E to pass environment, redirect all output to log file
+            # Important: Use --usecase=wsl,rocm for modern AMD support in WSL
             log_file = "/tmp/hlmagic_amd_install.log"
-            cmd = f"yes | sudo -E amdgpu-install -y --usecase=rocm --no-dkms > {log_file} 2>&1"
+            cmd = f"yes | sudo -E amdgpu-install -y --usecase=wsl,rocm --no-dkms > {log_file} 2>&1"
             result = subprocess.run(cmd, shell=True, env=env)
             
             if result.returncode != 0:
                 console.print("[yellow]amdgpu-install failed, attempting manual component installation...[/yellow]")
-                pkgs = ["rocm-core", "rocm-smi-lib", "clinfo", "rocm-opencl-runtime", "hsa-rocr"]
+                pkgs = ["rocm-core", "rocm-smi-lib", "clinfo", "rocm-opencl-runtime", "hsa-rocr-dev"]
                 apt_cmd = f"sudo -E apt-get install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold {' '.join(pkgs)} >> {log_file} 2>&1"
                 subprocess.run(apt_cmd, shell=True, env=env, check=True)
             
@@ -241,10 +240,13 @@ class HardwareScanner:
             console.print(f"[red]Error installing AMD stack: {e}[/red]")
             return
 
-        # 3. RDNA 4 Override Check (Hypothetical for GFX1200)
+        # 3. RDNA 4 / Navi 4 Override Check
         try:
-            lspci = subprocess.run(["lspci"], capture_output=True, text=True).stdout
-            if "Navi 4" in lspci or "GFX1200" in lspci: 
+            # Check for RX 9000 series or GFX12 architecture
+            lspci = subprocess.run(["lspci", "-nn"], capture_output=True, text=True).stdout.lower()
+            # 7550 is the RX 9070 XT ID we found earlier
+            if "7550" in lspci or "navi 4" in lspci or "gfx12" in lspci: 
+                 console.print("[blue]RDNA 4 detected! Applying GFX12 compatibility overrides...[/blue]")
                  self._append_to_bashrc("export HSA_OVERRIDE_GFX_VERSION=12.0.0")
         except Exception:
             pass
