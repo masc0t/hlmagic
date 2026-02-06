@@ -14,6 +14,9 @@ DEFAULT_CONFIG = {
     "storage": {
         "base_path": "/opt/hlmagic",
         "media_mounts": ["/mnt/d", "/mnt/e"]
+    },
+    "auth": {
+        "password": "hlmagic-default"
     }
 }
 
@@ -31,23 +34,24 @@ def load_config() -> Dict[str, Any]:
 
 def save_config(config: Dict[str, Any]):
     """Save configuration to TOML file."""
-    # Since tomlli_w might not be installed, I'll use a simple approach for now
-    # or just write the default manually if it's small.
-    # Actually, I should add it to dependencies.
-    
-    # For now, a simple manual write of the default to avoid external deps if possible
-    # But for real config management, tomlli_w is better.
-    
-    # Let's try to just use a simple string for the default.
-    content = """[brain]
-model = "llama3.1"
-temperature = 0.1
+    # Simple manual write to avoid extra deps for now
+    content = f"""[brain]
+model = "{config['brain']['model']}"
+temperature = {config['brain']['temperature']}
 
 [storage]
-base_path = "/opt/hlmagic"
-media_mounts = ["/mnt/d", "/mnt/e"]
+base_path = "{config['storage']['base_path']}"
+media_mounts = {config['storage']['media_mounts']}
+
+[auth]
+password = "{config.get('auth', {}).get('password', 'hlmagic-default')}"
 """
     CONFIG_FILE.write_text(content)
+
+def get_password() -> str:
+    """Get the configured access password."""
+    config = load_config()
+    return config.get("auth", {}).get("password", "hlmagic-default")
 
 def get_model() -> str:
     """Get the configured AI model."""

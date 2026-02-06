@@ -1,14 +1,14 @@
 import os
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, HTTPException, Form, Depends, Cookie
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from hlmagic.utils.agent import HLMagicAgent
 from hlmagic.utils.hardware import HardwareScanner
-import threading
-
 from hlmagic.utils.update import check_for_updates, apply_update, get_current_version
+from hlmagic.utils.config import get_password
+import threading
 
 app = FastAPI(title="HLMagic Web Interface")
 
@@ -18,18 +18,69 @@ agent = HLMagicAgent()
 class ChatRequest(BaseModel):
     message: str
 
+def is_authenticated(hl_token: str = Cookie(None)):
+    if hl_token == get_password():
+        return True
+    return False
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(error: str = None):
+    error_html = f'<p class="text-red-500 text-xs mt-2">{error}</p>' if error else ''
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Login - HLMagic</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-900 text-gray-100 flex items-center justify-center h-screen">
+        <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-96 border border-gray-700">
+            <div class="text-center mb-8">
+                <span class="text-4xl">🪄</span>
+                <h1 class="text-2xl font-bold mt-2">HLMagic Access</h1>
+            </div>
+            <form action="/login" method="post" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">Passphrase</label>
+                    <input type="password" name="password" required 
+                        class="w-full bg-gray-900 border border-gray-700 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                </div>
+                {error_html}
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 py-3 rounded-xl font-bold transition-colors">
+                    Unlock Brain
+                </button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.post("/login")
+async def login(password: str = Form(...)):
+    if password == get_password():
+        response = RedirectResponse(url="/", status_code=303)
+        response.set_cookie(key="hl_token", value=password, httponly=True)
+        return response
+    return RedirectResponse(url="/login?error=Invalid+passphrase", status_code=303)
+
 @app.get("/update-status")
-async def update_status():
+async def update_status(authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
     available, message = check_for_updates()
     return {"available": available, "message": message, "version": get_current_version()}
 
 @app.post("/update")
-async def run_update():
+async def run_update(authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
     success, message = apply_update()
     return {"success": success, "message": message}
 
 @app.get("/", response_class=HTMLResponse)
-async def index():
+async def index(hl_token: str = Cookie(None)):
+    if hl_token != get_password():
+        return RedirectResponse(url="/login")
     return """
     <!DOCTYPE html>
     <html lang="en">
@@ -183,7 +234,8 @@ async def index():
     """
 
 @app.post("/chat")
-async def chat(request: ChatRequest):
+async def chat(request: ChatRequest, authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
     try:
         # Run the agent and get the final response string
         response_text = agent.run(request.message)
