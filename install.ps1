@@ -59,7 +59,8 @@ nohup hlmagic serve > /opt/hlmagic/server.log 2>&1 &
 "@
 
 # Save and run the script inside WSL
-$setupScript | wsl -d Ubuntu-24.04 -u root bash -c "cat > /tmp/hl_setup.sh && chmod +x /tmp/hl_setup.sh"
+$setupScriptLF = $setupScript -replace "`r`n", "`n"
+$setupScriptLF | wsl -d Ubuntu-24.04 -u root bash -c "cat > /tmp/hl_setup.sh && chmod +x /tmp/hl_setup.sh"
 wsl -d Ubuntu-24.04 bash -c "/tmp/hl_setup.sh"
 
 Write-Host "🚀 HLMagic is now running!" -ForegroundColor Green
