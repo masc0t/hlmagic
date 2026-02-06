@@ -641,8 +641,8 @@ async def index(hl_token: str = Cookie(None)):
                 content.appendChild(p);
                 div.appendChild(avatar);
                 div.appendChild(content);
-                chatWindow.appendChild(div);
-                chatWindow.scrollTop = chatWindow.scrollHeight;
+                chatView.appendChild(div);
+                chatView.scrollTop = chatView.scrollHeight;
                 return p;
             }
 
@@ -684,10 +684,13 @@ async def index(hl_token: str = Cookie(None)):
 async def chat(request: ChatRequest, authenticated: bool = Depends(is_authenticated)):
     if not authenticated: raise HTTPException(status_code=401)
     try:
+        debug_log(f"Chat request received: {request.message}")
         # Run the agent and get the final response string
         response_text = agent.run(request.message)
+        debug_log(f"Agent response: {response_text[:100]}...")
         return {"response": response_text}
     except Exception as e:
+        debug_log(f"Chat error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
