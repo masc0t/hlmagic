@@ -118,6 +118,26 @@ def write_compose_file(service_name: str, compose_content: str):
     except Exception as e:
         return f"Error: {str(e)}"
 
+def setup_and_deploy_service(service_name: str, mounts: List[str] = None) -> str:
+    \"\"\"COMPLETELY setup and start a service. This is the preferred way to deploy.\"\"\"
+    try:
+        # 1. Generate the optimized content
+        content = get_optimized_template(service_name, mounts)
+        if "No template found" in content:
+            return content
+
+        # 2. Write the file
+        write_res = write_compose_file(service_name, content)
+        if "SECURITY BLOCK" in write_res or "Error" in write_res:
+            return write_res
+
+        # 3. Deploy
+        deploy_res = deploy_service(service_name)
+        return f"Successfully configured and started {service_name}. {deploy_res}"
+
+    except Exception as e:
+        return f"Error in autonomous setup: {str(e)}"
+
 def deploy_service(service_name: str) -> str:
     """Start a service using docker compose. Creates config directories automatically."""
     try:

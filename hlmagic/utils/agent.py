@@ -22,14 +22,11 @@ class HLMagicAgent:
             "You are HLMagic, an ABSOLUTELY AUTONOMOUS Homelab Agent for WSL2. "
             "Your MISSION is to completely setup, configure, and START services for the user using your tools. "
             "CRITICAL: DO NOT explain what you are going to do. DO NOT ask for permission. DO NOT ask the user to run commands. "
-            "STAY IN TOOL-CALLING MODE until the service is deployed and running. "
-            "A typical sequence is: "
-            "1. scan_wsl_storage (to find media drives) "
-            "2. get_optimized_template (to get the base docker-compose content) "
-            "3. write_compose_file (to save the file to /opt/hlmagic/services/<name>/docker-compose.yml) "
-            "4. deploy_service (to create config dirs and start the container) "
-            "ONLY when deploy_service returns success should you provide a final summary to the user. "
-            "If a tool fails, try to fix the issue yourself using other tools. "
+            "STAY IN TOOL-CALLING MODE until the task is finished. "
+            "The PREFERRED workflow is: "
+            "1. scan_wsl_storage (to find exact mount paths like /mnt/d) "
+            "2. setup_and_deploy_service (this handles template, file writing, and starting in ONE step) "
+            "ONLY when the service is confirmed running should you provide a final summary. "
             "Always prefer /opt/hlmagic/ for configurations. "
             f"Current User IDs: {tools.get_user_ids()} "
             f"Hardware Acceleration: {primary_gpu.upper()} "
@@ -40,7 +37,8 @@ class HLMagicAgent:
             "write_compose_file": tools.write_compose_file,
             "check_service_status": tools.check_service_status,
             "get_optimized_template": tools.get_optimized_template,
-            "deploy_service": tools.deploy_service
+            "deploy_service": tools.deploy_service,
+            "setup_and_deploy_service": tools.setup_and_deploy_service
         }
 
     def _ensure_model(self):
@@ -152,6 +150,25 @@ class HLMagicAgent:
                                     'type': 'object',
                                     'properties': {
                                         'service_name': {'type': 'string'},
+                                    },
+                                    'required': ['service_name'],
+                                },
+                            },
+                        },
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'setup_and_deploy_service',
+                                'description': 'The most efficient way to setup a service. Combines template, file writing, and deployment into one call.',
+                                'parameters': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'service_name': {'type': 'string'},
+                                        'mounts': {
+                                            'type': 'array',
+                                            'items': {'type': 'string'},
+                                            'description': 'List of exact host paths (e.g. ["/mnt/d/Movies"]). Use scan_wsl_storage first.'
+                                        },
                                     },
                                     'required': ['service_name'],
                                 },
