@@ -1,93 +1,44 @@
-# 🪄 HLMagic: Your Easy AI Homelab
+# 🪄 HLMagic: Autonomous WSL2 Homelab Agent
 
-**HLMagic** is a "zero-config" assistant that turns your Windows computer into a powerful home media and AI center. 
+HLMagic transforms your standard WSL2 environment into a high-performance, offline media and AI stack. No Docker Desktop, no cloud dependencies—just your hardware and local AI.
 
-You don't need to know how to code, how Linux works, or how to manage servers. You just talk to the agent, and it builds everything for you using your computer's hidden "Linux Mode" (WSL2).
+## 🚀 One-Line Installation (Windows PowerShell)
 
----
-
-## 🏁 Before You Start
-Ensure you have a modern Graphics Card (GPU) from **NVIDIA**, **AMD**, or **Intel**. For the best experience, make sure your Windows drivers are up to date!
-
----
-
-## 🚀 Step-by-Step Setup
-
-### Step 1: Turn on "Linux Mode" (WSL)
-1. Click your **Start Menu** and type `PowerShell`.
-2. Right-click **Windows PowerShell** and choose **Run as Administrator**.
-3. Copy and paste this command, then press Enter:
-   ```powershell
-   wsl --install -d Ubuntu-24.04
-   ```
-4. It will ask you to create a **Username** and **Password**. 
-   * *Note: When typing your password, you won't see any dots or stars. This is normal! Just type it and hit Enter.*
-
-### Step 3: Prepare your Linux system
-Copy and paste these two lines (one at a time) and press Enter. This installs the tools needed to run the agent.
-```bash
-sudo apt update
-sudo apt install -y python3-pip git
-```
-
-### Step 4: Install HLMagic
-Now, install the agent itself:
-```bash
-pip install git+https://github.com/masc0t/hlmagic.git --break-system-packages
-```
-*(Note: We use --break-system-packages because this is a dedicated "Magic" environment just for your homelab!)*
-
-**Run this line to make sure the "hlmagic" command works:**
-```bash
-export PATH=$PATH:~/.local/bin
-```
-
-### Step 5: The "Magic" Initialization
-Run this command to let the agent scan your computer and install your video card drivers automatically:
-```bash
-hlmagic init
-```
-* **If it tells you to restart:** Close the window, open PowerShell again, type `wsl --shutdown`, then reopen the Ubuntu app and run the command again.
-
----
-
-## 🧠 Talking to Your Agent
-Now for the fun part. You can tell HLMagic what you want in plain English.
-
-**Example: Setup a Movie Server (Plex)**
-```bash
-hlmagic run "Setup Plex using my D: drive for movies"
-```
-The agent will:
-1. Find your D: drive.
-2. Configure your Graphics Card so movies play smoothly.
-3. Start the server.
-
-**Check what's running:**
-```bash
-hlmagic status
-```
-
-**Clean up everything (Reset):**
-```bash
-hlmagic purge
-```
-
----
-
-## ❓ Simple Troubleshooting
-
-**"I get an error about WSL1"**
 Open PowerShell as Administrator and run:
-`wsl --set-version Ubuntu-24.04 2`
 
-**"My GPU isn't showing up"**
-Make sure you installed the latest drivers from the NVIDIA, AMD, or Intel website on your **Windows** desktop first.
+```powershell
+iex (iwr -useb https://raw.githubusercontent.com/jimey/HomeLabMagic/main/install.ps1)
+```
 
-**"What is my password?"**
-This is the password you created in **Step 2**. The agent needs it to install software for you.
+**What this does:**
+1.  **WSL2 Prep:** Ensures WSL2 is enabled and Ubuntu 24.04 is installed.
+2.  **Systemd Setup:** Automatically configures `systemd=true` for Docker support.
+3.  **Hardware Detection:** Identifies your GPU (NVIDIA, AMD, or Intel) and installs the correct drivers/runtimes.
+4.  **Local AI Brain:** Installs Ollama for private, local reasoning.
+5.  **Launch:** Opens the **HLMagic Web Interface** in your browser to begin setup.
+
+## 🧠 The Web Interface
+
+HLMagic is now fully managed via a ChatGPT-style web interface. Once installed, you can simply chat with your homelab:
+
+*   *"Setup Plex and mount my D: drive for movies."*
+*   *"Install Sonarr and Radarr."*
+*   *"Check the status of my services."*
+*   *"Update Ollama to use Llama3."*
+
+No direct WSL connection or terminal knowledge required.
+
+## 🛠️ Features
+- **Zero-Config Hardware Acceleration:** Automatic passthrough for NVIDIA (CUDA), AMD (ROCm), and Intel (OneAPI) GPUs.
+- **Local-First AI:** All reasoning happens on your machine via Ollama.
+- **Docker Engine (Direct):** Runs Docker directly in WSL2 (skipping Docker Desktop overhead).
+- **Secure by Design:** Strict path confinement and volume auditing for all generated configs.
+
+## 📂 Project Structure
+- `/hlmagic`: Core Python logic and Agent.
+- `/hlmagic/utils/templates.py`: Hardware-aware Docker Compose templates.
+- `/hlmagic/server.py`: FastAPI backend for the web interface.
+- `/install.ps1`: The Windows-to-WSL bridge installer.
 
 ---
-
-## 📜 License
-MIT
+*Built for the privacy-conscious homelab enthusiast.*

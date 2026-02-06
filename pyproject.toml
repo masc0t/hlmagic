@@ -6,7 +6,10 @@ dependencies = [
     "typer[all]",
     "rich",
     "ollama",
-    "psutil"
+    "psutil",
+    "fastapi",
+    "uvicorn",
+    "python-multipart"
 ]
 
 [project.scripts]

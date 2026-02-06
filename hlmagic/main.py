@@ -10,6 +10,14 @@ console = Console()
 app.command()(init)
 
 @app.command()
+def serve(host: str = "0.0.0.0", port: int = 8000):
+    """Start the HLMagic Web Interface."""
+    import uvicorn
+    from hlmagic.server import app as server_app
+    console.print(f"[bold green]Starting HLMagic Web Interface on {host}:{port}...[/bold green]")
+    uvicorn.run(server_app, host=host, port=port)
+
+@app.command()
 def run(prompt: str):
     """Pass a natural language instruction to the HLMagic Brain."""
     from hlmagic.utils.agent import HLMagicAgent

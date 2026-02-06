@@ -7,7 +7,9 @@ app = typer.Typer()
 console = Console()
 
 @app.command()
-def init():
+def init(
+    confirm: bool = typer.Option(False, "--confirm", "-y", help="Skip confirmation prompts and handle reboots automatically.")
+):
     """Verify WSL2 sanity and initialize HLMagic environment."""
     console.print("[bold blue]HLMagic Initializing...[/bold blue]")
 

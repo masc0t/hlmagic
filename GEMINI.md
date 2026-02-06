@@ -17,12 +17,16 @@ HLMagic includes built-in, hardware-aware templates for:
 - **Management:** Overseerr
 
 ## Technical Architecture
-### 1. The "Magic" Init (Phase 1)
-- Verifies WSL2 version.
-- Enforces `systemd=true` in `/etc/wsl.conf`.
-- Detects the Windows-to-WSL bridge (`/dev/dxg`).
+### 1. The PowerShell Bridge (Phase 1)
+- Automates WSL2 installation and hardware passthrough from Windows.
+- Eliminates the need for users to touch the Linux terminal.
 
-### 2. Universal Hardware Engine (Phase 2)
+### 2. The Web Brain (Phase 2)
+- **FastAPI Backend:** Runs inside WSL2, exposing the HLMagic Agent.
+- **ChatGPT-Style UI:** A modern, reactive web interface for all interactions.
+- **Automatic Init:** The first time the UI opens, it triggers the `hlmagic init` logic via the agent.
+
+### 3. Universal Hardware Engine (Phase 3)
 - **Detection:** Uses `lspci` Vendor IDs (`10de`, `1002`, `8086`) to identify GPUs.
 - **Optimized Templates:** Generates Docker Compose configurations that are automatically tuned for the detected hardware (e.g., adding `nvidia` runtime or `devices: [/dev/dri]`).
 - **Resource Management:** 60/40 VRAM split logic integrated into agent context.

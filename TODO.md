@@ -19,5 +19,18 @@
 - [x] **Status Command**: `hlmagic status` implemented.
 - [x] **Uninstall/Cleanup**: `hlmagic purge` implemented.
 
-## Phase 5: Documentation
+## Phase 5: Documentation (DONE ✅)
+
 - [x] Update `README.md` with a "Troubleshooting" section for common Fresh Install issues.
+
+
+
+## Phase 6: Web-First Experience (IN PROGRESS 🏗️)
+
+- [ ] **PowerShell Installer (`install.ps1`)**: Complete automation from Windows.
+
+- [ ] **FastAPI Backend**: Expose agent via REST/WebSockets.
+
+- [ ] **ChatGPT-Style Web UI**: Build the primary interface.
+
+- [ ] **Auto-Launch Logic**: Ensure browser opens automatically on successful install.

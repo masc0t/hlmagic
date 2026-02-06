@@ -69,7 +69,7 @@ class HLMagicAgent:
         except Exception as e:
             console.print(f"[yellow]Warning: Could not verify/pull model '{self.model}': {e}[/yellow]")
 
-    def run(self, user_input: str):
+    def run(self, user_input: str) -> str:
         """Main loop for processing user requests with tool support."""
         # Ensure Ollama has the model before running
         self._ensure_model()
@@ -108,40 +108,41 @@ class HLMagicAgent:
                                 },
                             },
                         },
-                                            {
-                                                'type': 'function',
-                                                'function': {
-                                                    'name': 'get_optimized_template',
-                                                    'description': 'Retrieve the hardware-optimized docker-compose YAML content for a service. Use this output for write_compose_file.',
-                                                    'parameters': {
-                                                        'type': 'object',
-                                                        'properties': {
-                                                            'service_name': {'type': 'string'},
-                                                            'mounts': {
-                                                                'type': 'array',
-                                                                'items': {'type': 'string'},
-                                                                'description': 'Optional list of host paths to mount (e.g., ["/mnt/d/Movies"]).'
-                                                            },
-                                                        },
-                                                        'required': ['service_name'],
-                                                    },
-                                                },
-                                            },
-                                            {
-                                                'type': 'function',
-                                                'function': {
-                                                    'name': 'write_compose_file',
-                                                    'description': 'Save docker-compose content to disk. Requires EXACT content from get_optimized_template.',
-                                                    'parameters': {
-                                                        'type': 'object',
-                                                        'properties': {
-                                                            'service_name': {'type': 'string'},
-                                                            'compose_content': {'type': 'string', 'description': 'The full YAML content to write.'},
-                                                        },
-                                                        'required': ['service_name', 'compose_content'],
-                                                    },
-                                                },
-                                            },                        {
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'get_optimized_template',
+                                'description': 'Retrieve the hardware-optimized docker-compose YAML content for a service. Use this output for write_compose_file.',
+                                'parameters': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'service_name': {'type': 'string'},
+                                        'mounts': {
+                                            'type': 'array',
+                                            'items': {'type': 'string'},
+                                            'description': 'Optional list of host paths to mount (e.g., ["/mnt/d/Movies"]).'
+                                        },
+                                    },
+                                    'required': ['service_name'],
+                                },
+                            },
+                        },
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'write_compose_file',
+                                'description': 'Save docker-compose content to disk. Requires EXACT content from get_optimized_template.',
+                                'parameters': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'service_name': {'type': 'string'},
+                                        'compose_content': {'type': 'string', 'description': 'The full YAML content to write.'},
+                                    },
+                                    'required': ['service_name', 'compose_content'],
+                                },
+                            },
+                        },
+                        {
                             'type': 'function',
                             'function': {
                                 'name': 'deploy_service',
@@ -182,8 +183,9 @@ class HLMagicAgent:
 
                 # If no tool calls, the brain is done talking to us
                 if not message.get('tool_calls'):
-                    console.print(f"\n[bold green]HLMagic:[/bold green] {message['content']}")
-                    break
+                    content = message.get('content', "Task completed.")
+                    console.print(f"\n[bold green]HLMagic:[/bold green] {content}")
+                    return content
 
                 # Process tool calls
                 for tool_call in message['tool_calls']:
@@ -213,8 +215,11 @@ class HLMagicAgent:
                         })
 
             except Exception as e:
-                console.print(f"[red]Error interacting with Ollama: {e}[/red]")
-                break
+                error_msg = f"Error interacting with Ollama: {e}"
+                console.print(f"[red]{error_msg}[/red]")
+                return error_msg
         else:
-            console.print("[red]Error: Brain reached maximum thought depth (10 steps).[/red]")
+            error_msg = "Error: Brain reached maximum thought depth (10 steps)."
+            console.print(f"[red]{error_msg}[/red]")
+            return error_msg
 
