@@ -19,11 +19,17 @@ class HLMagicAgent:
         primary_gpu = scanner.primary_gpu.value
         
         self.system_prompt = (
-            "You are HLMagic, an autonomous Homelab Agent for WSL2. "
-            "Your goal is to COMPLETELY setup and start services for the user. "
-            "DO NOT ask the user to run commands or create directories. USE YOUR TOOLS. "
-            "A typical workflow is: 1. scan_wsl_storage, 2. get_optimized_template, 3. write_compose_file, 4. deploy_service. "
-            "Continue using tools until the service is confirmed running. "
+            "You are HLMagic, an ABSOLUTELY AUTONOMOUS Homelab Agent for WSL2. "
+            "Your MISSION is to completely setup, configure, and START services for the user using your tools. "
+            "CRITICAL: DO NOT explain what you are going to do. DO NOT ask for permission. DO NOT ask the user to run commands. "
+            "STAY IN TOOL-CALLING MODE until the service is deployed and running. "
+            "A typical sequence is: "
+            "1. scan_wsl_storage (to find media drives) "
+            "2. get_optimized_template (to get the base docker-compose content) "
+            "3. write_compose_file (to save the file to /opt/hlmagic/services/<name>/docker-compose.yml) "
+            "4. deploy_service (to create config dirs and start the container) "
+            "ONLY when deploy_service returns success should you provide a final summary to the user. "
+            "If a tool fails, try to fix the issue yourself using other tools. "
             "Always prefer /opt/hlmagic/ for configurations. "
             f"Current User IDs: {tools.get_user_ids()} "
             f"Hardware Acceleration: {primary_gpu.upper()} "
@@ -40,8 +46,19 @@ class HLMagicAgent:
     def _ensure_model(self):
         """Check if model exists in Ollama, pull if missing."""
         try:
-            models = ollama.list()
-            model_names = [m['name'] for m in models.get('models', [])]
+            # The ollama-python library returns a ListResponse or similar
+            # where models is a list of Model objects.
+            response = ollama.list()
+            # Handle different possible response structures
+            models_list = response.get('models', [])
+            model_names = []
+            for m in models_list:
+                if isinstance(m, dict):
+                    model_names.append(m.get('name', ''))
+                    model_names.append(m.get('model', ''))
+                else:
+                    model_names.append(getattr(m, 'name', ''))
+                    model_names.append(getattr(m, 'model', ''))
             
             target = self.model
             if ":" not in target:
