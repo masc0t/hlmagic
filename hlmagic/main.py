@@ -31,10 +31,7 @@ def update():
     available, msg = check_for_updates()
     if available:
         console.print(f"[cyan]{msg}[/cyan]")
-        if apply_update()[0]:
-            console.print("[bold green]Success! Restarting the web server...[/bold green]")
-            # Attempt to restart server if running via systemd or background
-            # For now, we just inform the user.
+        apply_update(restart=True)
     else:
         console.print(f"[green]{msg}[/green]")
 

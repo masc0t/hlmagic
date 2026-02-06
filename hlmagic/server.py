@@ -9,11 +9,30 @@ from hlmagic.utils.hardware import HardwareScanner
 from hlmagic.utils.update import check_for_updates, apply_update, get_current_version
 from hlmagic.utils.config import get_password
 import threading
+import time
 
 app = FastAPI(title="HLMagic Web Interface")
 
 # Shared Agent Instance
 agent = HLMagicAgent()
+
+def auto_update_loop():
+    """Background task to automatically check and apply updates."""
+    # Wait for startup
+    time.sleep(60)
+    while True:
+        try:
+            available, _ = check_for_updates()
+            if available:
+                print("Automatic Update: New version found. Applying...")
+                apply_update(restart=True)
+        except Exception as e:
+            print(f"Auto-update error: {e}")
+        # Check every hour
+        time.sleep(3600)
+
+# Start background auto-updater
+threading.Thread(target=auto_update_loop, daemon=True).start()
 
 class ChatRequest(BaseModel):
     message: str
@@ -74,7 +93,7 @@ async def update_status(authenticated: bool = Depends(is_authenticated)):
 @app.post("/update")
 async def run_update(authenticated: bool = Depends(is_authenticated)):
     if not authenticated: raise HTTPException(status_code=401)
-    success, message = apply_update()
+    success, message = apply_update(restart=True)
     return {"success": success, "message": message}
 
 @app.get("/", response_class=HTMLResponse)

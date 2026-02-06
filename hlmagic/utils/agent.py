@@ -49,7 +49,7 @@ class HLMagicAgent:
 
     def _apply_update(self):
         from hlmagic.utils.update import apply_update
-        return apply_update()
+        return apply_update(restart=True)
 
     def _ensure_model(self):
         """Check if model exists in Ollama, pull if missing."""

@@ -39,7 +39,16 @@ def check_for_updates():
     except Exception as e:
         return False, f"Error checking for updates: {e}"
 
-def apply_update():
+def restart_server():
+    """Restart the current process to apply updates."""
+    import sys
+    import os
+    console.print("[yellow]Restarting HLMagic server...[/yellow]")
+    # This will replace the current process with a new one
+    # If running via nohup or systemd, this works perfectly.
+    os.execv(sys.executable, ['python3'] + sys.argv)
+
+def apply_update(restart: bool = False):
     """Pull the latest changes and reinstall dependencies."""
     if not REPO_PATH.exists():
         return False, "Repository not found."
@@ -55,11 +64,14 @@ def apply_update():
         if venv_pip.exists():
             subprocess.run([str(venv_pip), "install", "-e", "."], cwd=REPO_PATH, check=True, capture_output=True)
         else:
-            # Fallback to system pip if venv not found (though it should be there)
             subprocess.run(["pip", "install", "-e", "."], cwd=REPO_PATH, check=True, capture_output=True)
             
-        console.print("[green]✓ HLMagic updated successfully. Please restart the service.[/green]")
-        return True, "Update applied successfully. Restarting the server is recommended."
+        console.print("[green]✓ HLMagic updated successfully.[/green]")
+        
+        if restart:
+            restart_server()
+            
+        return True, "Update applied successfully."
     except Exception as e:
         console.print(f"[red]Error applying update: {e}[/red]")
         return False, f"Update failed: {e}"
