@@ -35,7 +35,7 @@ def auto_update_loop():
         time.sleep(3600)
 
 # Start background auto-updater
-threading.Thread(target=auto_update_loop, daemon=True).start()
+# threading.Thread(target=auto_update_loop, daemon=True).start()
 
 class ChatRequest(BaseModel):
     message: str
