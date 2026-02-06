@@ -1,5 +1,6 @@
 import os
 import uvicorn
+import psutil
 from fastapi import FastAPI, Request, HTTPException, Form, Depends, Cookie
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -206,14 +207,13 @@ async def system_status(authenticated: bool = Depends(is_authenticated)):
         res = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True)
         core[svc] = res.stdout.strip()
 
-    # Check for Windows Ollama conflict (common in Mirrored Mode)
+    # Check for Windows Ollama conflict
     ollama_conflict = False
     if core["ollama"] != "active":
         try:
             import socket
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(0.1)
-                # In mirrored mode, port 11434 will be open if Windows Ollama is running
                 if s.connect_ex(('127.0.0.1', 11434)) == 0:
                     ollama_conflict = True
         except: pass
@@ -237,19 +237,18 @@ async def system_status(authenticated: bool = Depends(is_authenticated)):
                 services.append({"name": name, "status": status})
 
     # 3. Hardware & System Metrics
-    import psutil
     scanner = HardwareScanner()
     scanner.scan()
     
     # CPU Info
-    cpu_usage = psutil.cpu_percent(interval=0.1)
+    cpu_usage = psutil.cpu_percent(interval=None) # Non-blocking
     cpu_count = psutil.cpu_count(logical=False)
     cpu_threads = psutil.cpu_count(logical=True)
     
     # Memory Info
     mem = psutil.virtual_memory()
     
-    # Disk Info (for /opt/hlmagic)
+    # Disk Info
     disk = psutil.disk_usage('/opt/hlmagic')
     
     return {
