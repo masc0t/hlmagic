@@ -206,6 +206,18 @@ async def system_status(authenticated: bool = Depends(is_authenticated)):
         res = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True)
         core[svc] = res.stdout.strip()
 
+    # Check for Windows Ollama conflict (common in Mirrored Mode)
+    ollama_conflict = False
+    if core["ollama"] != "active":
+        try:
+            import socket
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.1)
+                # In mirrored mode, port 11434 will be open if Windows Ollama is running
+                if s.connect_ex(('127.0.0.1', 11434)) == 0:
+                    ollama_conflict = True
+        except: pass
+
     # 2. Deployed Services
     services = []
     base_path = Path("/opt/hlmagic/services")
@@ -230,6 +242,7 @@ async def system_status(authenticated: bool = Depends(is_authenticated)):
     
     return {
         "core": core,
+        "ollama_conflict": ollama_conflict,
         "services": services,
         "hardware": {
             "gpu": scanner.primary_gpu.value,
@@ -494,6 +507,24 @@ async def index(hl_token: str = Cookie(None)):
                     const res = await fetch('/system-status');
                     const data = await res.json();
                     
+                    // 0. Global Alerts
+                    const alerts = document.getElementById('global-alerts') || document.createElement('div');
+                    alerts.id = 'global-alerts';
+                    alerts.innerHTML = '';
+                    if (data.ollama_conflict) {
+                        alerts.innerHTML = `
+                            <div class="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded-xl flex items-center justify-between mb-6">
+                                <div class="flex items-center">
+                                    <span class="text-xl mr-3">⚠️</span>
+                                    <p class="text-sm"><strong>Port Conflict:</strong> Ollama for Windows is running and blocking the HLMagic AI Engine. Please close Ollama for Windows to use HLMagic.</p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    if (!dashboardView.contains(alerts)) {
+                        dashboardView.prepend(alerts);
+                    }
+
                     // 1. Services Grid
                     const grid = document.getElementById('services-grid');
                     grid.innerHTML = data.services.length ? '' : '<p class="text-gray-500 text-sm italic">No services deployed yet. Ask the agent to setup something!</p>';
