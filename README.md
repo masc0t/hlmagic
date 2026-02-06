@@ -7,7 +7,7 @@ HLMagic transforms your standard WSL2 environment into a high-performance, offli
 Open PowerShell as Administrator and run:
 
 ```powershell
-iex (iwr -useb https://raw.githubusercontent.com/jimey/HomeLabMagic/main/install.ps1)
+iex (iwr -useb https://raw.githubusercontent.com/masc0t/hlmagic/main/install.ps1)
 ```
 
 **What this does:**
