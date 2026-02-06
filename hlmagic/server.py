@@ -8,6 +8,8 @@ from hlmagic.utils.agent import HLMagicAgent
 from hlmagic.utils.hardware import HardwareScanner
 import threading
 
+from hlmagic.utils.update import check_for_updates, apply_update, get_current_version
+
 app = FastAPI(title="HLMagic Web Interface")
 
 # Shared Agent Instance
@@ -15,6 +17,16 @@ agent = HLMagicAgent()
 
 class ChatRequest(BaseModel):
     message: str
+
+@app.get("/update-status")
+async def update_status():
+    available, message = check_for_updates()
+    return {"available": available, "message": message, "version": get_current_version()}
+
+@app.post("/update")
+async def run_update():
+    success, message = apply_update()
+    return {"success": success, "message": message}
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
@@ -37,10 +49,15 @@ async def index():
             <header class="flex items-center justify-between py-4 border-b border-gray-800">
                 <div class="flex items-center space-x-2">
                     <span class="text-2xl">🪄</span>
-                    <h1 class="text-xl font-bold tracking-tight">HLMagic <span class="text-blue-500 text-sm font-normal">v1.0.0</span></h1>
+                    <h1 class="text-xl font-bold tracking-tight">HLMagic <span id="version-tag" class="text-blue-500 text-sm font-normal">v...</span></h1>
                 </div>
-                <div id="status-badge" class="px-3 py-1 rounded-full text-xs bg-green-900 text-green-300 border border-green-700">
-                    System Ready
+                <div class="flex items-center space-x-3">
+                    <button id="update-btn" onclick="triggerUpdate()" class="hidden px-3 py-1 rounded-md text-xs bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+                        Update Available
+                    </button>
+                    <div id="status-badge" class="px-3 py-1 rounded-full text-xs bg-green-900 text-green-300 border border-green-700">
+                        System Ready
+                    </div>
                 </div>
             </header>
 
@@ -77,6 +94,36 @@ async def index():
             const chatWindow = document.getElementById('chat-window');
             const chatForm = document.getElementById('chat-form');
             const userInput = document.getElementById('user-input');
+            const updateBtn = document.getElementById('update-btn');
+            const versionTag = document.getElementById('version-tag');
+
+            async function checkUpdates() {
+                try {
+                    const res = await fetch('/update-status');
+                    const data = await res.json();
+                    versionTag.innerText = `v${data.version}`;
+                    if (data.available) {
+                        updateBtn.classList.remove('hidden');
+                    }
+                } catch (e) {}
+            }
+
+            async function triggerUpdate() {
+                if (!confirm("Are you sure you want to update HLMagic? This will pull latest code and restart dependencies.")) return;
+                updateBtn.innerText = "Updating...";
+                updateBtn.disabled = true;
+                try {
+                    const res = await fetch('/update', { method: 'POST' });
+                    const data = await res.json();
+                    alert(data.message);
+                    location.reload();
+                } catch (e) {
+                    alert("Update failed. Check logs.");
+                }
+            }
+
+            // Initial Check
+            checkUpdates();
 
             function addMessage(role, text) {
                 const div = document.createElement('div');

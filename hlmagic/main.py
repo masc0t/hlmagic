@@ -25,6 +25,20 @@ def run(prompt: str):
     agent.run(prompt)
 
 @app.command()
+def update():
+    """Check for and apply updates to HLMagic."""
+    from hlmagic.utils.update import check_for_updates, apply_update
+    available, msg = check_for_updates()
+    if available:
+        console.print(f"[cyan]{msg}[/cyan]")
+        if apply_update()[0]:
+            console.print("[bold green]Success! Restarting the web server...[/bold green]")
+            # Attempt to restart server if running via systemd or background
+            # For now, we just inform the user.
+    else:
+        console.print(f"[green]{msg}[/green]")
+
+@app.command()
 def status():
     """Show the status of all HLMagic services."""
     from rich.table import Table

@@ -38,8 +38,18 @@ class HLMagicAgent:
             "check_service_status": tools.check_service_status,
             "get_optimized_template": tools.get_optimized_template,
             "deploy_service": tools.deploy_service,
-            "setup_and_deploy_service": tools.setup_and_deploy_service
+            "setup_and_deploy_service": tools.setup_and_deploy_service,
+            "check_for_updates": self._check_updates,
+            "apply_update": self._apply_update
         }
+
+    def _check_updates(self):
+        from hlmagic.utils.update import check_for_updates
+        return check_for_updates()
+
+    def _apply_update(self):
+        from hlmagic.utils.update import apply_update
+        return apply_update()
 
     def _ensure_model(self):
         """Check if model exists in Ollama, pull if missing."""
@@ -173,6 +183,20 @@ class HLMagicAgent:
                                     },
                                     'required': ['service_name'],
                                 },
+                            },
+                        },
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'check_for_updates',
+                                'description': 'Check if a newer version of HLMagic is available on GitHub.',
+                            },
+                        },
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'apply_update',
+                                'description': 'Download and install the latest version of HLMagic. Will require a restart of the web interface.',
                             },
                         }
                     ]
