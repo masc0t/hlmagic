@@ -236,9 +236,21 @@ async def system_status(authenticated: bool = Depends(is_authenticated)):
                 except: status = "Error"
                 services.append({"name": name, "status": status})
 
-    # 3. Hardware
+    # 3. Hardware & System Metrics
+    import psutil
     scanner = HardwareScanner()
     scanner.scan()
+    
+    # CPU Info
+    cpu_usage = psutil.cpu_percent(interval=0.1)
+    cpu_count = psutil.cpu_count(logical=False)
+    cpu_threads = psutil.cpu_count(logical=True)
+    
+    # Memory Info
+    mem = psutil.virtual_memory()
+    
+    # Disk Info (for /opt/hlmagic)
+    disk = psutil.disk_usage('/opt/hlmagic')
     
     return {
         "core": core,
@@ -248,6 +260,17 @@ async def system_status(authenticated: bool = Depends(is_authenticated)):
             "gpu": scanner.primary_gpu.value,
             "vram_split": scanner.vram_split,
             "storage": scan_wsl_storage()
+        },
+        "system": {
+            "cpu_usage": cpu_usage,
+            "cpu_cores": f"{cpu_count}C/{cpu_threads}T",
+            "ram_total": round(mem.total / (1024**3), 1),
+            "ram_used": round(mem.used / (1024**3), 1),
+            "ram_percent": mem.percent,
+            "disk_total": round(disk.total / (1024**3), 1),
+            "disk_used": round(disk.used / (1024**3), 1),
+            "disk_percent": disk.percent,
+            "kernel": subprocess.run(["uname", "-r"], capture_output=True, text=True).stdout.strip()
         }
     }
 
@@ -565,18 +588,56 @@ async def index(hl_token: str = Cookie(None)):
                     // 3. Hardware Info
                     const hw = document.getElementById('hw-status');
                     hw.innerHTML = `
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-400">Primary GPU</span>
-                            <span class="text-sm font-bold text-blue-400">${data.hardware.gpu.toUpperCase()}</span>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <span class="text-xs text-gray-500 uppercase font-bold">Processor</span>
+                                <div class="flex justify-between items-center bg-gray-900 px-3 py-2 rounded-xl border border-gray-700">
+                                    <span class="text-xs text-gray-400">${data.system.cpu_cores}</span>
+                                    <span class="text-xs font-bold text-blue-400">${data.system.cpu_usage}%</span>
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <span class="text-xs text-gray-500 uppercase font-bold">Memory</span>
+                                <div class="flex justify-between items-center bg-gray-900 px-3 py-2 rounded-xl border border-gray-700">
+                                    <span class="text-xs text-gray-400">${data.system.ram_used}/${data.system.ram_total}GB</span>
+                                    <span class="text-xs font-bold text-blue-400">${data.system.ram_percent}%</span>
+                                </div>
+                            </div>
                         </div>
-                        <div class="flex justify-between">
-                            <span class="text-sm text-gray-400">VRAM/RAM Split</span>
-                            <span class="text-sm font-mono">${data.hardware.vram_split.HLMAGIC_BRAIN_RAM_GB}GB / ${data.hardware.vram_split.HLMAGIC_RESERVED_RAM_GB}GB</span>
+
+                        <div class="space-y-1 mt-4">
+                            <span class="text-xs text-gray-500 uppercase font-bold">GPU Acceleration</span>
+                            <div class="flex justify-between items-center bg-gray-900 px-3 py-2 rounded-xl border border-gray-700">
+                                <span class="text-xs text-gray-400">Primary: ${data.hardware.gpu.toUpperCase()}</span>
+                                <span class="text-xs font-mono font-bold text-green-400">${data.hardware.vram_split.HLMAGIC_BRAIN_RAM_GB}GB VRAM</span>
+                            </div>
                         </div>
-                        <div class="pt-2 border-t border-gray-700">
-                            <span class="text-xs text-gray-500 uppercase font-bold">Mount Points</span>
-                            <div class="mt-2 space-y-1">
-                                ${data.hardware.storage.map(s => `<div class="text-[10px] text-gray-400 font-mono">${s.path} (${s.device})</div>`).join('')}
+
+                        <div class="space-y-1 mt-4">
+                            <span class="text-xs text-gray-500 uppercase font-bold">Storage (/opt/hlmagic)</span>
+                            <div class="flex justify-between items-center bg-gray-900 px-3 py-2 rounded-xl border border-gray-700">
+                                <span class="text-xs text-gray-400">${data.system.disk_used}/${data.system.disk_total}GB</span>
+                                <div class="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                    <div class="bg-blue-500 h-full" style="width: ${data.system.disk_percent}%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 mt-2 border-t border-gray-700 space-y-3">
+                            <div class="space-y-1">
+                                <span class="text-xs text-gray-500 uppercase font-bold">Windows Mounts</span>
+                                <div class="space-y-1">
+                                    ${data.hardware.storage.map(s => `
+                                        <div class="flex justify-between items-center text-[10px] font-mono bg-gray-900 px-2 py-1 rounded border border-gray-800">
+                                            <span class="text-blue-300">${s.path}</span>
+                                            <span class="text-gray-500">${s.device}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-[10px] text-gray-500 uppercase font-bold">WSL Kernel</span>
+                                <span class="text-[10px] font-mono text-gray-400">${data.system.kernel}</span>
                             </div>
                         </div>
                     `;
