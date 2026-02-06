@@ -12,33 +12,31 @@ iex (iwr -useb https://raw.githubusercontent.com/masc0t/hlmagic/main/install.ps1
 
 **What this does:**
 1.  **WSL2 Prep:** Ensures WSL2 is enabled and Ubuntu 24.04 is installed.
-2.  **Systemd Setup:** Automatically configures `systemd=true` for Docker support.
-3.  **Hardware Detection:** Identifies your GPU (NVIDIA, AMD, or Intel) and installs the correct drivers/runtimes.
-4.  **Local AI Brain:** Installs Ollama for private, local reasoning.
-5.  **Launch:** Opens the **HLMagic Web Interface** (http://hlmagic.local:8000) in your browser to begin setup.
+2.  **Systemd Setup:** Automatically configures `systemd=true` and hardware passthrough.
+3.  **Local AI Brain:** Installs Ollama for private, local reasoning.
+4.  **Auto-Launcher:** Creates a **Desktop Shortcut** to start the server and open the UI.
+5.  **Launch:** Opens the **HLMagic Web Interface** (http://localhost:8000) to set your passphrase.
 
 ## 🧠 The Web Interface
 
-HLMagic is now fully managed via a ChatGPT-style web interface. Once installed, you can simply chat with your homelab:
+HLMagic is fully managed via a modern web interface. No terminal knowledge required.
 
-*   *"Setup Plex and mount my D: drive for movies."*
-*   *"Install Sonarr and Radarr."*
-*   *"Check the status of my services."*
-*   *"Update Ollama to use Llama3."*
-
-No direct WSL connection or terminal knowledge required.
+*   **Chat:** Tell your homelab what to do in plain English. *"Setup Plex and mount my D: drive."*
+*   **Dashboard:** Monitor service health, start/stop containers, and view hardware detection in real-time.
+*   **Settings:** Enable **Full Debug Mode** and view live logs for easy troubleshooting.
+*   **Auto-Updates:** Code and dependencies stay fresh automatically.
 
 ## 🛠️ Features
-- **Zero-Config Hardware Acceleration:** Automatic passthrough for NVIDIA (CUDA), AMD (ROCm), and Intel (OneAPI) GPUs.
-- **Local-First AI:** All reasoning happens on your machine via Ollama.
-- **Docker Engine (Direct):** Runs Docker directly in WSL2 (skipping Docker Desktop overhead).
-- **Secure by Design:** Strict path confinement and volume auditing for all generated configs.
+- **Zero-Config Hardware Acceleration:** Automatic support for NVIDIA, AMD (RDNA 3/4), and Intel GPUs.
+- **Local-First AI:** Private LLM reasoning via Ollama.
+- **Docker Engine (Direct):** High-performance container engine running directly in WSL2.
+- **Secure by Design:** Password-protected access and strict volume auditing.
 
 ## 📂 Project Structure
-- `/hlmagic`: Core Python logic and Agent.
-- `/hlmagic/utils/templates.py`: Hardware-aware Docker Compose templates.
-- `/hlmagic/server.py`: FastAPI backend for the web interface.
-- `/install.ps1`: The Windows-to-WSL bridge installer.
+- `/hlmagic/server.py`: FastAPI backend and Dashboard UI.
+- `/hlmagic/utils/agent.py`: The autonomous AI "Brain".
+- `/install.ps1`: The Windows-to-WSL one-line installer.
+- `/start_hlmagic.ps1`: Background service starter and browser launcher.
 
 ---
 *Built for the privacy-conscious homelab enthusiast.*

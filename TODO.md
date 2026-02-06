@@ -25,12 +25,14 @@
 
 
 
-## Phase 6: Web-First Experience (IN PROGRESS 🏗️)
+## Phase 6: Web-First Experience (DONE ✅)
+- [x] **PowerShell Installer (`install.ps1`)**: Complete automation from Windows.
+- [x] **FastAPI Backend**: Expose agent via REST and handle background tasks.
+- [x] **Management Dashboard**: Visual service control and system health.
+- [x] **First-Time Setup**: Secure passphrase configuration flow.
+- [x] **Desktop Launcher**: `HLMagic` shortcut for one-click startup.
 
-- [ ] **PowerShell Installer (`install.ps1`)**: Complete automation from Windows.
-
-- [ ] **FastAPI Backend**: Expose agent via REST/WebSockets.
-
-- [ ] **ChatGPT-Style Web UI**: Build the primary interface.
-
-- [ ] **Auto-Launch Logic**: Ensure browser opens automatically on successful install.
+## Phase 7: Polish & Hardware Stability (IN PROGRESS 🏗️)
+- [ ] **mDNS Reliability**: Investigate `.local` resolution consistency in Mirrored Networking mode.
+- [ ] **RDNA 4 Validation**: Finalize handshake for RX 9000-series in WSL kernel.
+- [ ] **Volume Browser**: Add a visual file explorer for mapping Windows folders to services.

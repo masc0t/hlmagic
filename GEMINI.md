@@ -23,13 +23,19 @@ HLMagic includes built-in, hardware-aware templates for:
 
 ### 2. The Web Brain (Phase 2)
 - **FastAPI Backend:** Runs inside WSL2, exposing the HLMagic Agent.
-- **ChatGPT-Style UI:** A modern, reactive web interface for all interactions.
-- **Automatic Init:** The first time the UI opens, it triggers the `hlmagic init` logic via the agent.
+- **Unified UI:** A modern, reactive interface with Chat, Dashboard, and Settings tabs.
+- **Service Control:** Remote Start/Stop capability for all deployed Docker services.
+- **First-Run Flow:** Secure passphrase setup on the first launch.
 
 ### 3. Universal Hardware Engine (Phase 3)
-- **Detection:** Uses `lspci` Vendor IDs (`10de`, `1002`, `8086`) to identify GPUs.
-- **Optimized Templates:** Generates Docker Compose configurations that are automatically tuned for the detected hardware (e.g., adding `nvidia` runtime or `devices: [/dev/dri]`).
+- **Detection:** Uses `lspci` and `dxgkrnl` status to identify GPUs (NVIDIA, AMD RDNA 3/4, Intel).
+- **Optimization:** Automatic `.wslconfig` generation for high-performance memory allocation.
 - **Resource Management:** 60/40 VRAM split logic integrated into agent context.
+
+### 4. Self-Healing & Debugging (Phase 4)
+- **Auto-Update Loop:** Hourly background checks with graceful process restarts.
+- **Full Debug Mode:** Toggleable verbose logging to `/opt/hlmagic/server.log`.
+- **Live Log Viewer:** Integrated UI component for real-time diagnostics.
 
 ### 3. The Brain (Agent)
 - **Natural Language Control:** `hlmagic "Setup Plex using my D: drive"`
