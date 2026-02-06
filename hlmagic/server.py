@@ -679,7 +679,11 @@ async def index(hl_token: str = Cookie(None)):
 
             function suggest(text) {
                 userInput.value = text;
-                chatForm.dispatchEvent(new Event('submit'));
+                if (typeof chatForm.requestSubmit === 'function') {
+                    chatForm.requestSubmit();
+                } else {
+                    chatForm.dispatchEvent(new Event('submit', {cancelable: true, bubbles: true}));
+                }
             }
 
             chatForm.onsubmit = async (e) => {
