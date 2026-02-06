@@ -119,7 +119,7 @@ def write_compose_file(service_name: str, compose_content: str):
         return f"Error: {str(e)}"
 
 def setup_and_deploy_service(service_name: str, mounts: List[str] = None) -> str:
-    \"\"\"COMPLETELY setup and start a service. This is the preferred way to deploy.\"\"\"
+    """COMPLETELY setup and start a service. This is the preferred way to deploy."""
     try:
         # 1. Generate the optimized content
         content = get_optimized_template(service_name, mounts)
