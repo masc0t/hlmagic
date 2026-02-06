@@ -1,6 +1,6 @@
 [project]
 name = "hlmagic"
-version = "0.4.0"
+version = "0.4.1"
 description = "Autonomous, local-AI Homelab Agent for WSL2"
 dependencies = [
     "typer[all]",
