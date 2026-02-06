@@ -175,6 +175,68 @@ async def run_restart(authenticated: bool = Depends(is_authenticated)):
     threading.Timer(1.0, restart_server).start()
     return {"message": "Server restarting..."}
 
+@app.get("/system-status")
+async def system_status(authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
+    
+    from hlmagic.utils.tools import scan_wsl_storage
+    from hlmagic.utils.hardware import HardwareScanner
+    import subprocess
+    from pathlib import Path
+
+    # 1. Core Services
+    core = {}
+    for svc in ["docker", "ollama", "avahi-daemon"]:
+        res = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True)
+        core[svc] = res.stdout.strip()
+
+    # 2. Deployed Services
+    services = []
+    base_path = Path("/opt/hlmagic/services")
+    if base_path.exists():
+        for service_dir in base_path.iterdir():
+            if service_dir.is_dir() and (service_dir / "docker-compose.yml").exists():
+                name = service_dir.name
+                status = "Stopped"
+                try:
+                    res = subprocess.run(
+                        ["sudo", "docker", "compose", "ps", "--format", "json"],
+                        cwd=service_dir, capture_output=True, text=True
+                    )
+                    if res.returncode == 0 and res.stdout.strip():
+                        status = "Running"
+                except: status = "Error"
+                services.append({"name": name, "status": status})
+
+    # 3. Hardware
+    scanner = HardwareScanner()
+    scanner.scan()
+    
+    return {
+        "core": core,
+        "services": services,
+        "hardware": {
+            "gpu": scanner.primary_gpu.value,
+            "vram_split": scanner.vram_split,
+            "storage": scan_wsl_storage()
+        }
+    }
+
+@app.post("/service/{name}/{action}")
+async def manage_service(name: str, action: str, authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
+    import subprocess
+    from pathlib import Path
+    
+    service_dir = Path(f"/opt/hlmagic/services/{name}")
+    if not service_dir.exists():
+        raise HTTPException(status_code=404, detail="Service not found")
+    
+    cmd = ["sudo", "docker", "compose", "up", "-d"] if action == "start" else ["sudo", "docker", "compose", "down"]
+    res = subprocess.run(cmd, cwd=service_dir, capture_output=True, text=True)
+    
+    return {"success": res.returncode == 0, "output": res.stdout or res.stderr}
+
 @app.get("/", response_class=HTMLResponse)
 async def index(hl_token: str = Cookie(None)):
     if not get_password():
@@ -196,14 +258,20 @@ async def index(hl_token: str = Cookie(None)):
         </style>
     </head>
     <body class="bg-gray-900 text-gray-100 font-sans">
-        <div class="max-w-4xl mx-auto p-4 flex flex-col h-screen">
+        <div class="max-w-6xl mx-auto p-4 flex flex-col h-screen">
             <header class="flex items-center justify-between py-4 border-b border-gray-800">
-                <div class="flex items-center space-x-2">
-                    <span class="text-2xl">🪄</span>
-                    <div>
-                        <h1 class="text-xl font-bold tracking-tight leading-tight">HLMagic</h1>
-                        <p class="text-[10px] text-gray-500 font-mono"><span id="version-tag">v...</span> <span id="version-date"></span></p>
+                <div class="flex items-center space-x-6">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-2xl">🪄</span>
+                        <div>
+                            <h1 class="text-xl font-bold tracking-tight leading-tight">HLMagic</h1>
+                            <p class="text-[10px] text-gray-500 font-mono"><span id="version-tag">v...</span> <span id="version-date"></span></p>
+                        </div>
                     </div>
+                    <nav class="flex space-x-1 bg-gray-800 p-1 rounded-xl">
+                        <button onclick="showTab('chat')" id="tab-chat" class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors bg-blue-600 text-white">Chat</button>
+                        <button onclick="showTab('dashboard')" id="tab-dashboard" class="px-4 py-1.5 rounded-lg text-sm font-medium transition-colors text-gray-400 hover:text-white">Dashboard</button>
+                    </nav>
                 </div>
                 <div class="flex items-center space-x-3">
                     <button id="update-btn" onclick="triggerUpdate()" class="hidden px-3 py-1 rounded-md text-xs bg-blue-600 hover:bg-blue-500 text-white transition-colors">
@@ -218,7 +286,7 @@ async def index(hl_token: str = Cookie(None)):
                 </div>
             </header>
 
-            <main id="chat-window" class="chat-container overflow-y-auto py-6 space-y-4 flex-1">
+            <main id="chat-view" class="chat-container overflow-y-auto py-6 space-y-4 flex-1">
                 <!-- Initial Message -->
                 <div class="flex items-start space-x-3">
                     <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">🪄</div>
@@ -233,7 +301,31 @@ async def index(hl_token: str = Cookie(None)):
                 </div>
             </main>
 
-            <footer class="py-4">
+            <main id="dashboard-view" class="hidden flex-1 overflow-y-auto py-6 space-y-8">
+                <section>
+                    <h2 class="text-lg font-bold mb-4 flex items-center"><span class="mr-2">📦</span> Deployed Services</h2>
+                    <div id="services-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Service cards injected here -->
+                    </div>
+                </section>
+
+                <section class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h2 class="text-lg font-bold mb-4 flex items-center"><span class="mr-2">⚡</span> System Health</h2>
+                        <div id="core-status" class="bg-gray-800 rounded-2xl p-6 border border-gray-700 space-y-4">
+                            <!-- Core status injected here -->
+                        </div>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold mb-4 flex items-center"><span class="mr-2">📟</span> Hardware Context</h2>
+                        <div id="hw-status" class="bg-gray-800 rounded-2xl p-6 border border-gray-700 space-y-4">
+                            <!-- HW info injected here -->
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            <footer id="chat-footer" class="py-4">
                 <form id="chat-form" class="relative">
                     <input type="text" id="user-input" 
                         class="w-full bg-gray-800 border border-gray-700 rounded-2xl py-4 pl-6 pr-16 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-500"
@@ -248,12 +340,112 @@ async def index(hl_token: str = Cookie(None)):
         </div>
 
         <script>
-            const chatWindow = document.getElementById('chat-window');
+            const chatView = document.getElementById('chat-view');
+            const dashboardView = document.getElementById('dashboard-view');
+            const chatFooter = document.getElementById('chat-footer');
+            const tabChat = document.getElementById('tab-chat');
+            const tabDashboard = document.getElementById('tab-dashboard');
+
             const chatForm = document.getElementById('chat-form');
             const userInput = document.getElementById('user-input');
             const updateBtn = document.getElementById('update-btn');
             const versionTag = document.getElementById('version-tag');
             const versionDate = document.getElementById('version-date');
+
+            function showTab(tab) {
+                if (tab === 'chat') {
+                    chatView.classList.remove('hidden');
+                    chatFooter.classList.remove('hidden');
+                    dashboardView.classList.add('hidden');
+                    tabChat.classList.add('bg-blue-600', 'text-white');
+                    tabChat.classList.remove('text-gray-400');
+                    tabDashboard.classList.remove('bg-blue-600', 'text-white');
+                    tabDashboard.classList.add('text-gray-400');
+                } else {
+                    chatView.classList.add('hidden');
+                    chatFooter.classList.add('hidden');
+                    dashboardView.classList.remove('hidden');
+                    tabDashboard.classList.add('bg-blue-600', 'text-white');
+                    tabDashboard.classList.remove('text-gray-400');
+                    tabChat.classList.remove('bg-blue-600', 'text-white');
+                    tabChat.classList.add('text-gray-400');
+                    refreshDashboard();
+                }
+            }
+
+            async function refreshDashboard() {
+                try {
+                    const res = await fetch('/system-status');
+                    const data = await res.json();
+                    
+                    // 1. Services Grid
+                    const grid = document.getElementById('services-grid');
+                    grid.innerHTML = data.services.length ? '' : '<p class="text-gray-500 text-sm italic">No services deployed yet. Ask the agent to setup something!</p>';
+                    data.services.forEach(svc => {
+                        const card = document.createElement('div');
+                        card.className = "bg-gray-800 border border-gray-700 rounded-2xl p-5 flex flex-col justify-between";
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="font-bold text-lg capitalize">${svc.name}</h3>
+                                    <span class="text-xs px-2 py-0.5 rounded-full ${svc.status === 'Running' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}">
+                                        ${svc.status}
+                                    </span>
+                                </div>
+                                <span class="text-2xl">${svc.name === 'jellyfin' ? '🎬' : svc.name === 'plex' ? '📽️' : '📦'}</span>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button onclick="svcAction('${svc.name}', 'start')" class="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-xl text-xs font-bold transition-colors">Start</button>
+                                <button onclick="svcAction('${svc.name}', 'stop')" class="flex-1 bg-gray-900 hover:bg-red-900 py-2 rounded-xl text-xs font-bold transition-colors border border-gray-700">Stop</button>
+                            </div>
+                        `;
+                        grid.appendChild(card);
+                    });
+
+                    // 2. Core Health
+                    const core = document.getElementById('core-status');
+                    core.innerHTML = '';
+                    Object.entries(data.core).forEach(([name, status]) => {
+                        const row = document.createElement('div');
+                        row.className = "flex justify-between items-center";
+                        row.innerHTML = `
+                            <span class="text-sm text-gray-400 font-mono">${name}</span>
+                            <span class="text-xs font-bold ${status === 'active' ? 'text-green-400' : 'text-red-400'}">${status.toUpperCase()}</span>
+                        `;
+                        core.appendChild(row);
+                    });
+
+                    // 3. Hardware Info
+                    const hw = document.getElementById('hw-status');
+                    hw.innerHTML = `
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-400">Primary GPU</span>
+                            <span class="text-sm font-bold text-blue-400">${data.hardware.gpu.toUpperCase()}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-sm text-gray-400">VRAM/RAM Split</span>
+                            <span class="text-sm font-mono">${data.hardware.vram_split.HLMAGIC_BRAIN_RAM_GB}GB / ${data.hardware.vram_split.HLMAGIC_RESERVED_RAM_GB}GB</span>
+                        </div>
+                        <div class="pt-2 border-t border-gray-700">
+                            <span class="text-xs text-gray-500 uppercase font-bold">Mount Points</span>
+                            <div class="mt-2 space-y-1">
+                                ${data.hardware.storage.map(s => `<div class="text-[10px] text-gray-400 font-mono">${s.path} (${s.device})</div>`).join('')}
+                            </div>
+                        </div>
+                    `;
+
+                } catch (e) {
+                    console.error("Dashboard refresh failed", e);
+                }
+            }
+
+            async function svcAction(name, action) {
+                if (!confirm(`Are you sure you want to ${action} ${name}?`)) return;
+                try {
+                    await fetch(`/service/${name}/${action}`, { method: 'POST' });
+                    refreshDashboard();
+                } catch (e) { alert("Action failed"); }
+            }
 
             async function checkUpdates() {
                 try {
