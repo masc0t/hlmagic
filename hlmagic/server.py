@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from hlmagic.utils.agent import HLMagicAgent
 from hlmagic.utils.hardware import HardwareScanner
-from hlmagic.utils.update import check_for_updates, apply_update, get_current_version
+from hlmagic.utils.update import check_for_updates, apply_update, get_current_version, get_version_info
 from hlmagic.utils.config import get_password, set_password
 import threading
 import time
@@ -100,6 +100,10 @@ async def setup_password(password: str = Form(...)):
 async def login_page(error: str = None):
     if not get_password():
         return RedirectResponse(url="/setup-password")
+    
+    info = get_version_info()
+    version_str = f"v{info['version']} ({info['date'][:10]})"
+    
     error_html = f'<p class="text-red-500 text-xs mt-2">{error}</p>' if error else ''
     return f"""
     <!DOCTYPE html>
@@ -115,6 +119,7 @@ async def login_page(error: str = None):
             <div class="text-center mb-8">
                 <span class="text-4xl">🪄</span>
                 <h1 class="text-2xl font-bold mt-2">HLMagic Access</h1>
+                <p class="text-gray-500 text-[10px] mt-1">{version_str}</p>
             </div>
             <form action="/login" method="post" class="space-y-4">
                 <div>

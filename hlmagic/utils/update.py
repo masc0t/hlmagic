@@ -20,6 +20,22 @@ def get_current_version() -> str:
         pass
     return "unknown"
 
+def get_version_info():
+    """Get version and last update datetime."""
+    version = get_current_version()
+    last_update = "unknown"
+    if REPO_PATH.exists():
+        try:
+            # Get the ISO 8601 date of the last commit
+            res = subprocess.run(
+                ["git", "log", "-1", "--format=%cI"], 
+                cwd=REPO_PATH, check=True, capture_output=True, text=True
+            )
+            last_update = res.stdout.strip()
+        except Exception:
+            pass
+    return {"version": version, "date": last_update}
+
 def check_for_updates():
     """Check if the local repo is behind origin/main."""
     if not REPO_PATH.exists():
