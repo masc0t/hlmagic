@@ -110,41 +110,40 @@ class HLMagicAgent:
                                 },
                             },
                         },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'get_optimized_template',
-                                'description': 'Get a safe, hardware-optimized docker-compose template for a service.',
-                                'parameters': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'service_name': {'type': 'string'},
-                                        'mounts': {
-                                            'type': 'array',
-                                            'items': {'type': 'string'},
-                                            'description': 'Optional list of host paths to mount (e.g., ["/mnt/d/Movies"]).'
-                                        },
-                                    },
-                                    'required': ['service_name'],
-                                },
-                            },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'write_compose_file',
-                                'description': 'Generate a docker-compose.yml for a service.',
-                                'parameters': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'service_name': {'type': 'string'},
-                                        'compose_content': {'type': 'string'},
-                                    },
-                                    'required': ['service_name', 'compose_content'],
-                                },
-                            },
-                        },
-                        {
+                                            {
+                                                'type': 'function',
+                                                'function': {
+                                                    'name': 'get_optimized_template',
+                                                    'description': 'Retrieve the hardware-optimized docker-compose YAML content for a service. Use this output for write_compose_file.',
+                                                    'parameters': {
+                                                        'type': 'object',
+                                                        'properties': {
+                                                            'service_name': {'type': 'string'},
+                                                            'mounts': {
+                                                                'type': 'array',
+                                                                'items': {'type': 'string'},
+                                                                'description': 'Optional list of host paths to mount (e.g., ["/mnt/d/Movies"]).'
+                                                            },
+                                                        },
+                                                        'required': ['service_name'],
+                                                    },
+                                                },
+                                            },
+                                            {
+                                                'type': 'function',
+                                                'function': {
+                                                    'name': 'write_compose_file',
+                                                    'description': 'Save docker-compose content to disk. Requires EXACT content from get_optimized_template.',
+                                                    'parameters': {
+                                                        'type': 'object',
+                                                        'properties': {
+                                                            'service_name': {'type': 'string'},
+                                                            'compose_content': {'type': 'string', 'description': 'The full YAML content to write.'},
+                                                        },
+                                                        'required': ['service_name', 'compose_content'],
+                                                    },
+                                                },
+                                            },                        {
                             'type': 'function',
                             'function': {
                                 'name': 'deploy_service',
@@ -174,14 +173,22 @@ class HLMagicAgent:
                     function_name = tool_call['function']['name']
                     args = tool_call['function']['arguments']
                     
-                    console.print(f"[yellow]Action: Calling tool {function_name}...[/yellow]")
+                    console.print(f"[yellow]Action: Calling tool {function_name} with args: {json.dumps(args)}...[/yellow]")
                     
                     if function_name in self.available_tools:
-                        result = self.available_tools[function_name](**args)
-                        messages.append({
-                            'role': 'tool',
-                            'content': str(result),
-                        })
+                        try:
+                            result = self.available_tools[function_name](**args)
+                            messages.append({
+                                'role': 'tool',
+                                'content': str(result),
+                            })
+                        except TypeError as e:
+                            error_msg = f"Error: Tool {function_name} failed due to incorrect arguments: {e}"
+                            console.print(f"[red]{error_msg}[/red]")
+                            messages.append({
+                                'role': 'tool',
+                                'content': error_msg,
+                            })
                     else:
                         messages.append({
                             'role': 'tool',
