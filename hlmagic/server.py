@@ -25,7 +25,10 @@ def auto_update_loop():
             available, _ = check_for_updates()
             if available:
                 print("Automatic Update: New version found. Applying...")
-                apply_update(restart=True)
+                from hlmagic.utils.update import apply_update, restart_server
+                success, _ = apply_update()
+                if success:
+                    threading.Timer(5.0, restart_server).start()
         except Exception as e:
             print(f"Auto-update error: {e}")
         # Check every hour
@@ -93,7 +96,11 @@ async def update_status(authenticated: bool = Depends(is_authenticated)):
 @app.post("/update")
 async def run_update(authenticated: bool = Depends(is_authenticated)):
     if not authenticated: raise HTTPException(status_code=401)
-    success, message = apply_update(restart=True)
+    from hlmagic.utils.update import apply_update, restart_server
+    success, message = apply_update()
+    if success:
+        # Restart in 5 seconds to allow UI to show message
+        threading.Timer(5.0, restart_server).start()
     return {"success": success, "message": message}
 
 @app.post("/restart")
@@ -214,10 +221,21 @@ async def index(hl_token: str = Cookie(None)):
                 try {
                     const res = await fetch('/update', { method: 'POST' });
                     const data = await res.json();
-                    alert(data.message);
-                    location.reload();
+                    if (data.success) {
+                        alert(data.message + " The server will restart automatically in 5 seconds.");
+                        setTimeout(() => {
+                            location.reload();
+                        }, 6000);
+                    } else {
+                        alert(data.message);
+                        updateBtn.innerText = "Update Available";
+                        updateBtn.disabled = false;
+                    }
                 } catch (e) {
-                    alert("Update failed. Check logs.");
+                    alert("Update triggered. Server may be restarting.");
+                    setTimeout(() => {
+                        location.reload();
+                    }, 6000);
                 }
             }
 

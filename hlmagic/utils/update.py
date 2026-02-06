@@ -48,13 +48,13 @@ def restart_server():
     # If running via nohup or systemd, this works perfectly.
     os.execv(sys.executable, ['python3'] + sys.argv)
 
-def apply_update(restart: bool = False):
+def apply_update():
     """Pull the latest changes and reinstall dependencies."""
     if not REPO_PATH.exists():
         return False, "Repository not found."
 
     try:
-        console.print("[yellow]Updating HLMagic...[/yellow]")
+        console.print("[yellow]Updating HLMagic code...[/yellow]")
         
         # Pull latest
         subprocess.run(["git", "pull", "origin", "main"], cwd=REPO_PATH, check=True, capture_output=True)
@@ -66,12 +66,8 @@ def apply_update(restart: bool = False):
         else:
             subprocess.run(["pip", "install", "-e", "."], cwd=REPO_PATH, check=True, capture_output=True)
             
-        console.print("[green]✓ HLMagic updated successfully.[/green]")
-        
-        if restart:
-            restart_server()
-            
-        return True, "Update applied successfully."
+        console.print("[green]✓ HLMagic update applied to disk.[/green]")
+        return True, "Update applied successfully. Server will restart in a moment."
     except Exception as e:
         console.print(f"[red]Error applying update: {e}[/red]")
         return False, f"Update failed: {e}"
