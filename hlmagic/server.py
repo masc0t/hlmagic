@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from hlmagic.utils.agent import HLMagicAgent
 from hlmagic.utils.hardware import HardwareScanner
 from hlmagic.utils.update import check_for_updates, apply_update, get_current_version
-from hlmagic.utils.config import get_password
+from hlmagic.utils.config import get_password, set_password
 import threading
 import time
 
@@ -41,12 +41,65 @@ class ChatRequest(BaseModel):
     message: str
 
 def is_authenticated(hl_token: str = Cookie(None)):
-    if hl_token == get_password():
+    pwd = get_password()
+    if not pwd:
+        return False
+    if hl_token == pwd:
         return True
     return False
 
+@app.get("/setup-password", response_class=HTMLResponse)
+async def setup_password_page(error: str = None):
+    if get_password():
+        return RedirectResponse(url="/login")
+    error_html = f'<p class="text-red-500 text-xs mt-2">{error}</p>' if error else ''
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Setup - HLMagic</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-gray-900 text-gray-100 flex items-center justify-center h-screen">
+        <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-96 border border-gray-700">
+            <div class="text-center mb-8">
+                <span class="text-4xl">🪄</span>
+                <h1 class="text-2xl font-bold mt-2">Set Your Passphrase</h1>
+                <p class="text-gray-400 text-sm mt-1">This will be used to secure your HLMagic Brain.</p>
+            </div>
+            <form action="/setup-password" method="post" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">New Passphrase</label>
+                    <input type="password" name="password" required 
+                        class="w-full bg-gray-900 border border-gray-700 rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                </div>
+                {error_html}
+                <button type="submit" class="w-full bg-green-600 hover:bg-green-500 py-3 rounded-xl font-bold transition-colors">
+                    Save and Continue
+                </button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+
+@app.post("/setup-password")
+async def setup_password(password: str = Form(...)):
+    if get_password():
+        return RedirectResponse(url="/login")
+    if len(password) < 4:
+        return RedirectResponse(url="/setup-password?error=Minimum+4+characters")
+    set_password(password)
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(key="hl_token", value=password, httponly=True)
+    return response
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(error: str = None):
+    if not get_password():
+        return RedirectResponse(url="/setup-password")
     error_html = f'<p class="text-red-500 text-xs mt-2">{error}</p>' if error else ''
     return f"""
     <!DOCTYPE html>
@@ -113,6 +166,8 @@ async def run_restart(authenticated: bool = Depends(is_authenticated)):
 
 @app.get("/", response_class=HTMLResponse)
 async def index(hl_token: str = Cookie(None)):
+    if not get_password():
+        return RedirectResponse(url="/setup-password")
     if hl_token != get_password():
         return RedirectResponse(url="/login")
     return """

@@ -16,7 +16,7 @@ DEFAULT_CONFIG = {
         "media_mounts": ["/mnt/d", "/mnt/e"]
     },
     "auth": {
-        "password": "hlmagic-default"
+        "password": ""
     }
 }
 
@@ -44,14 +44,22 @@ base_path = "{config['storage']['base_path']}"
 media_mounts = {config['storage']['media_mounts']}
 
 [auth]
-password = "{config.get('auth', {}).get('password', 'hlmagic-default')}"
+password = "{config.get('auth', {}).get('password', '')}"
 """
     CONFIG_FILE.write_text(content)
 
 def get_password() -> str:
     """Get the configured access password."""
     config = load_config()
-    return config.get("auth", {}).get("password", "hlmagic-default")
+    return config.get("auth", {}).get("password", "")
+
+def set_password(password: str):
+    """Set the access password in config."""
+    config = load_config()
+    if "auth" not in config:
+        config["auth"] = {}
+    config["auth"]["password"] = password
+    save_config(config)
 
 def get_model() -> str:
     """Get the configured AI model."""
