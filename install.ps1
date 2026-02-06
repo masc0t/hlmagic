@@ -14,8 +14,8 @@ if (-not (Get-Command wsl -ErrorAction SilentlyContinue)) {
 }
 
 # 2. Check if Ubuntu-24.04 is installed
-$distros = wsl --list --quiet
-if ($distros -notmatch "Ubuntu-24.04") {
+$distros = wsl --list --quiet | ForEach-Object { $_ -replace "\x00", "" } | Where-Object { $_ -ne "" }
+if ($distros -notcontains "Ubuntu-24.04") {
     Write-Host "📦 Installing Ubuntu 24.04..." -ForegroundColor Cyan
     wsl --install -d Ubuntu-24.04
     # Wait for installation to finish (it usually opens a new window)
