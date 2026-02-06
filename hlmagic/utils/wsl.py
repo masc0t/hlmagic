@@ -1,5 +1,6 @@
 import os
 import subprocess
+import shutil
 from pathlib import Path
 from rich.console import Console
 
@@ -148,6 +149,27 @@ def pull_model(model_name: str):
         return True
     except Exception as e:
         console.print(f"[red]Error pulling model: {e}[/red]")
+        return False
+
+def install_docker():
+    """Install Docker Engine using the official script."""
+    if shutil.which("docker"):
+        console.print("[green]✓ Docker is already installed.[/green]")
+        return True
+
+    console.print("[yellow]Installing Docker Engine...[/yellow]")
+    try:
+        cmd = "curl -fsSL https://get.docker.com | sh"
+        subprocess.run(["bash", "-c", cmd], check=True)
+        
+        # Add user to docker group
+        user = os.getenv("USER", "ubuntu")
+        subprocess.run(["sudo", "usermod", "-aG", "docker", user], check=True)
+        
+        console.print("[green]✓ Docker installed and permissions set.[/green]")
+        return True
+    except Exception as e:
+        console.print(f"[red]Error installing Docker: {e}[/red]")
         return False
 
 def _write_wsl_conf(content: str):

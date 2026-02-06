@@ -61,8 +61,12 @@ def init():
     else:
         console.print("[yellow]! No supported acceleration hardware found. Running in CPU-only mode.[/yellow]")
 
-    # 4. Ollama Setup
-    console.print("\n[bold]Phase 3: AI Engine Setup[/bold]")
+    # 4. Docker Setup
+    console.print("\n[bold]Phase 3: Container Engine Setup[/bold]")
+    wsl.install_docker()
+
+    # 5. Ollama Setup
+    console.print("\n[bold]Phase 4: AI Engine Setup[/bold]")
     
     if wsl.install_ollama():
         wsl.start_ollama_service()
