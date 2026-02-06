@@ -13,7 +13,17 @@ app.command()(init)
 def serve(host: str = "0.0.0.0", port: int = 8000):
     """Start the HLMagic Web Interface."""
     import uvicorn
+    import subprocess
+    import os
     from hlmagic.server import app as server_app
+    
+    # Pre-flight: Clear any existing process on this port
+    try:
+        # Simple bash command to find and kill port holder
+        cmd = f"fuser -k {port}/tcp"
+        subprocess.run(cmd.split(), capture_output=True)
+    except: pass
+
     console.print(f"[bold green]Starting HLMagic Web Interface on {host}:{port}...[/bold green]")
     uvicorn.run(server_app, host=host, port=port)
 
