@@ -96,6 +96,14 @@ async def run_update(authenticated: bool = Depends(is_authenticated)):
     success, message = apply_update(restart=True)
     return {"success": success, "message": message}
 
+@app.post("/restart")
+async def run_restart(authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
+    from hlmagic.utils.update import restart_server
+    # Restart in a separate thread to allow response to be sent
+    threading.Timer(1.0, restart_server).start()
+    return {"message": "Server restarting..."}
+
 @app.get("/", response_class=HTMLResponse)
 async def index(hl_token: str = Cookie(None)):
     if hl_token != get_password():
@@ -124,6 +132,9 @@ async def index(hl_token: str = Cookie(None)):
                 <div class="flex items-center space-x-3">
                     <button id="update-btn" onclick="triggerUpdate()" class="hidden px-3 py-1 rounded-md text-xs bg-blue-600 hover:bg-blue-500 text-white transition-colors">
                         Update Available
+                    </button>
+                    <button id="restart-btn" onclick="triggerRestart()" class="px-3 py-1 rounded-md text-xs bg-gray-700 hover:bg-gray-600 text-white transition-colors">
+                        Restart
                     </button>
                     <div id="status-badge" class="px-3 py-1 rounded-full text-xs bg-green-900 text-green-300 border border-green-700">
                         System Ready
@@ -176,6 +187,24 @@ async def index(hl_token: str = Cookie(None)):
                         updateBtn.classList.remove('hidden');
                     }
                 } catch (e) {}
+            }
+
+            async function triggerRestart() {
+                if (!confirm("Are you sure you want to restart the HLMagic server?")) return;
+                const btn = document.getElementById('restart-btn');
+                btn.innerText = "Restarting...";
+                btn.disabled = true;
+                try {
+                    await fetch('/restart', { method: 'POST' });
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                } catch (e) {
+                    alert("Restart triggered.");
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                }
             }
 
             async function triggerUpdate() {
