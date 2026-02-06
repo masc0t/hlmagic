@@ -52,6 +52,10 @@ def is_authenticated(hl_token: str = Cookie(None)):
 async def setup_password_page(error: str = None):
     if get_password():
         return RedirectResponse(url="/login")
+    
+    info = get_version_info()
+    version_str = f"v{info['version']} ({info['date'][:10]})"
+    
     error_html = f'<p class="text-red-500 text-xs mt-2">{error}</p>' if error else ''
     return f"""
     <!DOCTYPE html>
@@ -68,6 +72,7 @@ async def setup_password_page(error: str = None):
                 <span class="text-4xl">🪄</span>
                 <h1 class="text-2xl font-bold mt-2">Set Your Passphrase</h1>
                 <p class="text-gray-400 text-sm mt-1">This will be used to secure your HLMagic Brain.</p>
+                <p class="text-gray-500 text-[10px] mt-2">{version_str}</p>
             </div>
             <form action="/setup-password" method="post" class="space-y-4">
                 <div>
@@ -149,7 +154,8 @@ async def login(password: str = Form(...)):
 async def update_status(authenticated: bool = Depends(is_authenticated)):
     if not authenticated: raise HTTPException(status_code=401)
     available, message = check_for_updates()
-    return {"available": available, "message": message, "version": get_current_version()}
+    info = get_version_info()
+    return {"available": available, "message": message, "version": info["version"], "date": info["date"]}
 
 @app.post("/update")
 async def run_update(authenticated: bool = Depends(is_authenticated)):
@@ -194,7 +200,10 @@ async def index(hl_token: str = Cookie(None)):
             <header class="flex items-center justify-between py-4 border-b border-gray-800">
                 <div class="flex items-center space-x-2">
                     <span class="text-2xl">🪄</span>
-                    <h1 class="text-xl font-bold tracking-tight">HLMagic <span id="version-tag" class="text-blue-500 text-sm font-normal">v...</span></h1>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight leading-tight">HLMagic</h1>
+                        <p class="text-[10px] text-gray-500 font-mono"><span id="version-tag">v...</span> <span id="version-date"></span></p>
+                    </div>
                 </div>
                 <div class="flex items-center space-x-3">
                     <button id="update-btn" onclick="triggerUpdate()" class="hidden px-3 py-1 rounded-md text-xs bg-blue-600 hover:bg-blue-500 text-white transition-colors">
@@ -244,12 +253,16 @@ async def index(hl_token: str = Cookie(None)):
             const userInput = document.getElementById('user-input');
             const updateBtn = document.getElementById('update-btn');
             const versionTag = document.getElementById('version-tag');
+            const versionDate = document.getElementById('version-date');
 
             async function checkUpdates() {
                 try {
                     const res = await fetch('/update-status');
                     const data = await res.json();
                     versionTag.innerText = `v${data.version}`;
+                    if (data.date) {
+                        versionDate.innerText = `(${data.date.substring(0, 10)})`;
+                    }
                     if (data.available) {
                         updateBtn.classList.remove('hidden');
                     }
