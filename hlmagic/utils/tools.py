@@ -99,9 +99,8 @@ def write_compose_file(service_name: str, compose_content: str):
         if not str(target_dir).startswith(str(base_path)):
             raise SecurityViolation("Path traversal detected: Target directory matches outside /opt/hlmagic.")
 
-        # 3. Execution (via sudo)
-        # Use sudo to create directory and write file
-        subprocess.run(["sudo", "mkdir", "-p", str(target_dir)], check=True)
+        # 3. Execution (removed sudo as user owns /opt/hlmagic)
+        os.makedirs(str(target_dir), exist_ok=True)
         
         temp_file = Path(f"/tmp/{service_name}_docker-compose.yml")
         temp_file.write_text(compose_content)
@@ -110,7 +109,8 @@ def write_compose_file(service_name: str, compose_content: str):
         if not temp_file.exists():
              raise IOError("Failed to write temporary compose file.")
 
-        subprocess.run(["sudo", "mv", str(temp_file), str(target_dir / "docker-compose.yml")], check=True)
+        import shutil
+        shutil.move(str(temp_file), str(target_dir / "docker-compose.yml"))
         return f"Successfully wrote compose file to {target_dir}/docker-compose.yml"
 
     except SecurityViolation as e:
@@ -150,14 +150,12 @@ def deploy_service(service_name: str) -> str:
             return f"Error: No docker-compose.yml found in {service_dir}. Write the file first!"
 
         # 2. Pre-flight: Create config dir with correct permissions
-        subprocess.run(["sudo", "mkdir", "-p", str(config_dir)], check=True)
-        user_ids = get_user_ids()
-        subprocess.run(["sudo", "chown", f"{user_ids['PUID']}:{user_ids['PGID']}", str(config_dir)], check=True)
+        os.makedirs(str(config_dir), exist_ok=True)
 
-        # 3. Execution
+        # 3. Execution (removed sudo as user is in docker group)
         console.print(f"[yellow]Deploying {service_name}...[/yellow]")
         result = subprocess.run(
-            ["sudo", "docker", "compose", "up", "-d"],
+            ["docker", "compose", "up", "-d"],
             cwd=service_dir,
             capture_output=True,
             text=True

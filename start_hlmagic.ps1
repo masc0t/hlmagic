@@ -5,9 +5,9 @@ $ErrorActionPreference = "SilentlyContinue"
 
 Write-Host "🪄 Starting HLMagic..." -ForegroundColor Cyan
 
-# 1. Trigger the background process in WSL
-# We use setsid and nohup to ensure it persists
-wsl -d Ubuntu-24.04 bash -c "pgrep -af 'hlmagic serve' || nohup /opt/hlmagic/venv/bin/hlmagic serve > /opt/hlmagic/server.log 2>&1 &"
+# 1. Trigger the background process in WSL via systemd
+Write-Host "🧠 Launching HLMagic Service..." -ForegroundColor Cyan
+wsl -d Ubuntu-24.04 sudo systemctl start hlmagic
 
 # 2. Wait for the port to become active (max 10 seconds)
 $retries = 0

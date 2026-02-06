@@ -56,14 +56,11 @@ def check_for_updates():
         return False, f"Error checking for updates: {e}"
 
 def restart_server():
-    """Restart the current process to apply updates."""
+    """Exit the process and let systemd or the background loop restart it."""
     import sys
-    import os
-    print("Restart: Server process is restarting NOW...")
-    console.print("[yellow]Restarting HLMagic server...[/yellow]")
-    # This will replace the current process with a new one
-    # If running via nohup or systemd, this works perfectly.
-    os.execv(sys.executable, ['python3'] + sys.argv)
+    print("Restart: Signalling process exit for restart...")
+    # Systemd will see this exit and restart the service automatically
+    sys.exit(0)
 
 def apply_update():
     """Pull the latest changes and reinstall dependencies."""
