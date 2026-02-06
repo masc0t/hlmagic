@@ -35,33 +35,54 @@ def is_systemd_running() -> bool:
         return False
 
 def ensure_systemd():
-    """Ensure [boot] systemd=true is in /etc/wsl.conf and active."""
+    """Ensure [boot] systemd=true and [network] hostname=hlmagic are in /etc/wsl.conf."""
     # 1. Check if it's already running
-    if is_systemd_running():
+    systemd_ok = is_systemd_running()
+    
+    # Check hostname
+    import socket
+    hostname_ok = socket.gethostname() == "hlmagic"
+
+    if systemd_ok and hostname_ok:
         return True
 
-    # 2. If not running, check if it's at least configured
-    if WSL_CONF_PATH.exists():
-        content = WSL_CONF_PATH.read_text()
-        if "systemd=true" in content:
-            # Configured but not running -> needs restart
-            return False
-
-    # 3. Not configured, let's configure it
-    console.print("[yellow]Systemd not enabled. Updating /etc/wsl.conf...[/yellow]")
-    
+    # 2. Check/Update config
+    needs_update = False
     content = ""
     if WSL_CONF_PATH.exists():
         content = WSL_CONF_PATH.read_text()
 
-    if "[boot]" in content:
-        if "systemd=true" not in content:
-            content = content.replace("[boot]", "[boot]\nsystemd=true")
-    else:
+    if "[boot]" not in content:
         content += "\n[boot]\nsystemd=true\n"
+        needs_update = True
+    elif "systemd=true" not in content:
+        content = content.replace("[boot]", "[boot]\nsystemd=true")
+        needs_update = True
+
+    if "[network]" not in content:
+        content += "\n[network]\nhostname=hlmagic\ngenerateHosts=true\n"
+        needs_update = True
+    elif "hostname=hlmagic" not in content:
+        content = content.replace("[network]", "[network]\nhostname=hlmagic\ngenerateHosts=true")
+        needs_update = True
     
-    _write_wsl_conf(content.strip() + "\n")
-    return False # Needs restart
+    if needs_update:
+        console.print("[yellow]Updating /etc/wsl.conf for systemd and hostname...[/yellow]")
+        _write_wsl_conf(content.strip() + "\n")
+        return False # Needs restart
+
+    return systemd_ok and hostname_ok
+
+def setup_mdns():
+    """Install and enable Avahi for .local resolution."""
+    try:
+        console.print("[yellow]Setting up mDNS (hlmagic.local)...[/yellow]")
+        subprocess.run(["sudo", "apt-get", "install", "-y", "avahi-daemon"], check=True, capture_output=True)
+        subprocess.run(["sudo", "systemctl", "enable", "--now", "avahi-daemon"], check=True, capture_output=True)
+        return True
+    except Exception as e:
+        console.print(f"[red]Error setting up mDNS: {e}[/red]")
+        return False
 
 def validate_sudo():
     """Verify the user has sudo privileges and refresh the timestamp."""

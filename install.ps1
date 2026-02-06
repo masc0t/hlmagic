@@ -64,6 +64,9 @@ $setupScriptLF | wsl -d Ubuntu-24.04 -u root bash -c "cat > /tmp/hl_setup.sh && 
 wsl -d Ubuntu-24.04 bash -c "/tmp/hl_setup.sh"
 
 Write-Host "🚀 HLMagic is now running!" -ForegroundColor Green
+
 Write-Host "🌐 Opening the Web Interface..." -ForegroundColor Cyan
 
-Start-Process "http://localhost:8000"
+
+
+Start-Process "http://hlmagic.local:8000"

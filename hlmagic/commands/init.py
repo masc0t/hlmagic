@@ -28,13 +28,16 @@ def init(
         raise typer.Exit(code=1)
     console.print("[green]✓ WSL2 detected.[/green]")
 
-    # 2. Check systemd
-    systemd_enabled = wsl.ensure_systemd()
-    if not systemd_enabled:
-        console.print("[bold yellow]Action Required:[/bold yellow] systemd was just enabled.")
-        console.print("Please run [bold cyan]wsl --shutdown[/bold cyan] from your Windows terminal, then restart WSL.")
+    # 2. Check systemd and Hostname
+    systemd_ready = wsl.ensure_systemd()
+    if not systemd_ready:
+        console.print("[bold yellow]Action Required:[/bold yellow] systemd or hostname was just updated.")
+        console.print("Please run [bold cyan]wsl --shutdown[/bold cyan] from your Windows terminal, then restart HLMagic.")
         raise typer.Exit()
-    console.print("[green]✓ systemd is enabled.[/green]")
+    console.print("[green]✓ systemd and hostname are ready.[/green]")
+
+    # Setup mDNS
+    wsl.setup_mdns()
 
     # 3. Universal Hardware Setup
     console.print("\n[bold]Phase 2: Universal Hardware Engine[/bold]")

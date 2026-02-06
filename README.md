@@ -15,7 +15,7 @@ iex (iwr -useb https://raw.githubusercontent.com/masc0t/hlmagic/main/install.ps1
 2.  **Systemd Setup:** Automatically configures `systemd=true` for Docker support.
 3.  **Hardware Detection:** Identifies your GPU (NVIDIA, AMD, or Intel) and installs the correct drivers/runtimes.
 4.  **Local AI Brain:** Installs Ollama for private, local reasoning.
-5.  **Launch:** Opens the **HLMagic Web Interface** in your browser to begin setup.
+5.  **Launch:** Opens the **HLMagic Web Interface** (http://hlmagic.local:8000) in your browser to begin setup.
 
 ## 🧠 The Web Interface
 
