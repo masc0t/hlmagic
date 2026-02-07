@@ -201,22 +201,29 @@ async def system_status(authenticated: bool = Depends(is_authenticated)):
     import subprocess
     from pathlib import Path
 
-    # 1. Core Services
+    # 1. Core Services (Ollama is now managed as a deployed service)
     core = {}
-    for svc in ["docker", "ollama", "avahi-daemon"]:
+    for svc in ["docker", "avahi-daemon"]:
         res = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True)
         core[svc] = res.stdout.strip()
 
-    # Check for Windows Ollama conflict
+    # Check for Windows Ollama conflict (common in Mirrored Mode)
     ollama_conflict = False
-    if core["ollama"] != "active":
-        try:
-            import socket
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(0.1)
-                if s.connect_ex(('127.0.0.1', 11434)) == 0:
+    try:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.1)
+            # Port 11434 will be open if Windows Ollama or our Docker service is running
+            if s.connect_ex(('127.0.0.1', 11434)) == 0:
+                # If port is open, check if it's our docker container
+                docker_check = subprocess.run(
+                    ["docker", "ps", "-q", "-f", "name=ollama"],
+                    capture_output=True, text=True
+                )
+                if not docker_check.stdout.strip():
+                    # Port is open but NO ollama container found -> Windows conflict
                     ollama_conflict = True
-        except: pass
+    except: pass
 
     # 2. Deployed Services
     services = []
