@@ -26,25 +26,29 @@ def debug_log(msg: str):
 
 def auto_update_loop():
     """Background task to automatically check and apply updates."""
-    # Wait for startup
-    time.sleep(60)
+    # Wait for startup stability
+    time.sleep(300) 
     while True:
         try:
+            # Only check if we haven't checked/updated very recently
             debug_log("Auto-update check starting...")
             available, _ = check_for_updates()
             if available:
                 debug_log("Automatic Update: New version found. Applying...")
                 from hlmagic.utils.update import apply_update, restart_server
+                # Note: apply_update returns (success, message)
                 success, _ = apply_update()
                 if success:
-                    debug_log("Update applied. Scheduling restart in 5s.")
-                    threading.Timer(5.0, restart_server).start()
+                    debug_log("Update applied successfully. Scheduling restart in 10s.")
+                    threading.Timer(10.0, restart_server).start()
+                    # Exit the loop to prevent further checks before restart
+                    break
             else:
                 debug_log("Auto-update check: No updates found.")
         except Exception as e:
             debug_log(f"Auto-update error: {e}")
-        # Check every hour
-        time.sleep(3600)
+        # Check every 24 hours (86400s) during development to avoid interference
+        time.sleep(86400)
 
 # Start background auto-updater
 threading.Thread(target=auto_update_loop, daemon=True).start()
