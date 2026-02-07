@@ -67,22 +67,22 @@ class HardwareScanner:
         # 2. Check /dev/dxg (WSL2 bridge)
         # If lspci failed to show the physical IDs (common in some WSL versions/kernels),
         # but /dev/dxg exists, we have GPU passthrough.
-        if Path("/dev/dxg").exists() and not detected:
-            console.print("[blue]DirectX Graphics Link (/dev/dxg) detected. Identifying vendor via alternative means...[/blue]")
-            
-            # Try to find vendor via /proc/pal (AMD) or nvidia-smi
-            if Path("/proc/amdgpu").exists() or Path("/sys/module/amdgpu").exists():
-                detected.append(GPUVendor.AMD)
-            elif Path("/proc/driver/nvidia").exists() or shutil.which("nvidia-smi"):
-                detected.append(GPUVendor.NVIDIA)
-            else:
-                # If we have dxg but can't find specific drivers yet, 
-                # we'll look for any "Microsoft" or "Basic Render" string in lspci which often masks the real GPU
-                lspci_raw = subprocess.run(["lspci"], capture_output=True, text=True).stdout
-                if "Microsoft" in lspci_raw or "Basic Render" in lspci_raw or "GFX" in lspci_raw:
-                    # In this case, we have a passthrough but it's generic.
-                    # Given the RX 9070 XT context, we will fallback to AMD if it's the only likely choice.
+        if Path("/dev/dxg").exists():
+            # Check for AMD-specific indicators first
+            if Path("/proc/amdgpu").exists() or Path("/sys/module/amdgpu").exists() or shutil.which("rocminfo") or shutil.which("clinfo"):
+                if GPUVendor.AMD not in detected:
                     detected.append(GPUVendor.AMD)
+            
+            # If still nothing detected but dxg is there, look at lspci raw strings
+            if not detected:
+                lspci_raw = subprocess.run(["lspci"], capture_output=True, text=True).stdout.lower()
+                if any(x in lspci_raw for x in ["microsoft", "basic render", "gfx"]):
+                    # On many modern RDNA 3/4 systems, it shows as a generic MS driver initially.
+                    # We will assume AMD if rocminfo or clinfo are present (set by our installer)
+                    if shutil.which("clinfo"):
+                        detected.append(GPUVendor.AMD)
+                    elif shutil.which("nvidia-smi"):
+                        detected.append(GPUVendor.NVIDIA)
                     
         # Multi-GPU Logic: If we found Intel (Integrated) and another (Discrete), prefer the Discrete one.
         if len(detected) > 1 and GPUVendor.INTEL in detected:
