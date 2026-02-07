@@ -16,10 +16,10 @@ def get_gpu_section(vendor: str) -> str:
     elif vendor == GPUVendor.AMD.value:
         return """
     devices:
-      - /dev/kfd:/dev/kfd
-      - /dev/dri:/dev/dri
+      - /dev/dxg:/dev/dxg
     environment:
-      - HSA_OVERRIDE_GFX_VERSION=12.0.0
+      - HSA_OVERRIDE_GFX_VERSION=12.0.1
+      - HSA_ENABLE_SDMA=0
 """
     elif vendor == GPUVendor.INTEL.value:
         return """
@@ -47,7 +47,7 @@ def get_service_template(service: str, gpu_vendor: str, puid: int, pgid: int, mo
         "ollama": f"""version: '3.8'
 services:
   ollama:
-    image: ollama/ollama:latest
+    image: {'ollama/ollama:rocm' if gpu_vendor == 'amd' else 'ollama/ollama:latest'}
     container_name: ollama
     restart: always
     ports:
