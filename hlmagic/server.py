@@ -769,10 +769,21 @@ async def index(hl_token: str = Cookie(None)):
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ message: msg })
                     });
+                    
+                    if (response.status === 401) {
+                        loadingMsg.innerText = "Session expired. Please refresh the page to login again.";
+                        loadingMsg.parentElement.classList.add('bg-amber-900');
+                        return;
+                    }
+
                     const data = await response.json();
-                    loadingMsg.innerText = data.response;
+                    if (data.response) {
+                        loadingMsg.innerText = data.response;
+                    } else {
+                        loadingMsg.innerText = "The agent returned an empty response.";
+                    }
                 } catch (err) {
-                    loadingMsg.innerText = "Error: Could not reach the HLMagic agent.";
+                    loadingMsg.innerText = "Error: Could not reach the HLMagic agent. Check if the server is running.";
                     loadingMsg.parentElement.classList.add('bg-red-900');
                 }
             };
