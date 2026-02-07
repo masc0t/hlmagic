@@ -6,6 +6,14 @@ from rich.console import Console
 from hlmagic.utils import tools, config
 from hlmagic.utils.hardware import HardwareScanner
 
+def debug_log(msg: str):
+    """Bridge to the server's debug logger if available."""
+    try:
+        from hlmagic.server import debug_log as server_log
+        server_log(msg)
+    except:
+        print(f"DEBUG: {msg}")
+
 console = Console()
 
 class HLMagicAgent:
@@ -202,6 +210,14 @@ class HLMagicAgent:
                 )
 
                 message = response['message']
+                
+                # Programmatic Hallucination Shield:
+                # If the model provides tool calls AND conversational text, 
+                # we discard the text to prevent "talking about" the action.
+                if message.get('tool_calls') and message.get('content'):
+                    debug_log(f"Hallucination Detected: Model tried to talk while calling tools. Stripping content.")
+                    message['content'] = ""
+
                 messages.append(message)
 
                 # If no tool calls, the brain is done talking to us
