@@ -181,6 +181,35 @@ def check_service_status(service_name: str = "docker") -> str:
     except Exception as e:
         return f"error: {str(e)}"
 
+def get_service_urls() -> Dict[str, str]:
+    """Retrieve local access URLs for all deployed HLMagic services."""
+    urls = {
+        "hlmagic": "http://localhost:8000 (or http://hlmagic.local:8000)"
+    }
+    
+    # Common port mappings
+    port_map = {
+        "jellyfin": 8096,
+        "plex": 32400,
+        "sonarr": 8989,
+        "radarr": 7878,
+        "lidarr": 8686,
+        "overseerr": 5055,
+        "ollama": 11434
+    }
+
+    base_path = Path("/opt/hlmagic/services")
+    if base_path.exists():
+        for service_dir in base_path.iterdir():
+            if service_dir.is_dir() and (service_dir / "docker-compose.yml").exists():
+                name = service_dir.name.lower()
+                if name in port_map:
+                    urls[name] = f"http://localhost:{port_map[name]} (or http://hlmagic.local:{port_map[name]})"
+                else:
+                    urls[name] = "Service deployed, but port unknown."
+                    
+    return urls
+
 def get_user_ids() -> Dict[str, int]:
     """Get PUID and PGID for the current WSL user (usually 1000)."""
     return {

@@ -34,6 +34,8 @@ class HLMagicAgent:
             "IF A TOOL IS NEEDED, CALL IT IMMEDIATELY. "
             "Stay in tool-calling mode until the task is 100% complete. "
             "Only when the service is confirmed running should you provide a final, short summary. "
+            "Assume anything the user asks about is their own personal homelab. "
+            "If asked for a link, ALWAYS provide the local URL (e.g. http://localhost:PORT) using your tools. "
             "Always prefer /opt/hlmagic/ for configurations. "
             f"Current User IDs: {tools.get_user_ids()} "
             f"Hardware Acceleration: {primary_gpu.upper()} "
@@ -47,7 +49,8 @@ class HLMagicAgent:
             "deploy_service": tools.deploy_service,
             "setup_and_deploy_service": tools.setup_and_deploy_service,
             "check_for_updates": self._check_updates,
-            "apply_update": self._apply_update
+            "apply_update": self._apply_update,
+            "get_service_urls": tools.get_service_urls
         }
 
     def _check_updates(self):
@@ -204,6 +207,13 @@ class HLMagicAgent:
                             'function': {
                                 'name': 'apply_update',
                                 'description': 'Download and install the latest version of HLMagic. Will require a restart of the web interface.',
+                            },
+                        },
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'get_service_urls',
+                                'description': 'Retrieve the local URLs and ports for all active homelab services.',
                             },
                         }
                     ]
