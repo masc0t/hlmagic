@@ -181,6 +181,45 @@ def check_service_status(service_name: str = "docker") -> str:
     except Exception as e:
         return f"error: {str(e)}"
 
+def execute_autonomous_task(script_content: str, interpreter: str = "bash") -> str:
+    """
+    Execute a complex task by writing and running an ephemeral script.
+    Use this for debugging, fixing permissions, or any task not covered by other tools.
+    """
+    import uuid
+    import subprocess
+    from pathlib import Path
+
+    task_id = str(uuid.uuid4())[:8]
+    script_path = Path(f"/tmp/hl_task_{task_id}.sh")
+    
+    try:
+        # Write the script
+        script_path.write_text(script_content)
+        script_path.chmod(0o755)
+        
+        # Execute the script
+        cmd = [interpreter, str(script_path)]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60 # Safety timeout
+        )
+        
+        # Combine output
+        output = f"--- STDOUT ---\n{result.stdout}\n"
+        if result.stderr:
+            output += f"--- STDERR ---\n{result.stderr}\n"
+            
+        return output
+    except Exception as e:
+        return f"Execution Error: {str(e)}"
+    finally:
+        # Cleanup
+        if script_path.exists():
+            script_path.unlink()
+
 def get_service_urls() -> Dict[str, str]:
     """Retrieve local access URLs for all deployed HLMagic services."""
     urls = {

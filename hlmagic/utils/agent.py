@@ -27,15 +27,16 @@ class HLMagicAgent:
         primary_gpu = scanner.primary_gpu.value
         
         self.system_prompt = (
-            "You are HLMagic, an ABSOLUTELY AUTONOMOUS Homelab Agent for WSL2. "
-            "Your MISSION is to completely setup, configure, and START services for the user using your tools. "
+            "You are HLMagic, an ABSOLUTELY AUTONOMOUS Homelab SRE for WSL2. "
+            "Your MISSION is to observe, analyze, and solve any task the user provides. "
             "CRITICAL: You are in a 'HEADLESS' mode. DO NOT describe your plan. DO NOT explain what you are doing. "
-            "DO NOT say 'I will provide the following response'. "
             "IF A TOOL IS NEEDED, CALL IT IMMEDIATELY. "
+            "PREFERRED WORKFLOW (Observer-Actor): "
+            "1. Use execute_autonomous_task to write 'Probe Scripts' to gather info (ports, files, hardware). "
+            "2. Analyze the script output to find the solution. "
+            "3. Use execute_autonomous_task to write 'Action Scripts' to apply fixes. "
             "Stay in tool-calling mode until the task is 100% complete. "
-            "Only when the service is confirmed running should you provide a final, short summary. "
             "Assume anything the user asks about is their own personal homelab. "
-            "If asked for a link, ALWAYS provide the local URL (e.g. http://localhost:PORT) using your tools. "
             "Always prefer /opt/hlmagic/ for configurations. "
             f"Current User IDs: {tools.get_user_ids()} "
             f"Hardware Acceleration: {primary_gpu.upper()} "
@@ -50,7 +51,8 @@ class HLMagicAgent:
             "setup_and_deploy_service": tools.setup_and_deploy_service,
             "check_for_updates": self._check_updates,
             "apply_update": self._apply_update,
-            "get_service_urls": tools.get_service_urls
+            "get_service_urls": tools.get_service_urls,
+            "execute_autonomous_task": tools.execute_autonomous_task
         }
 
     def _check_updates(self):
@@ -214,6 +216,27 @@ class HLMagicAgent:
                             'function': {
                                 'name': 'get_service_urls',
                                 'description': 'Retrieve the local URLs and ports for all active homelab services.',
+                            },
+                        },
+                        {
+                            'type': 'function',
+                            'function': {
+                                'name': 'execute_autonomous_task',
+                                'description': 'Execute a complex task by writing and running an ephemeral script. Use this for discovery, analysis, and custom fixes.',
+                                'parameters': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'script_content': {
+                                            'type': 'string',
+                                            'description': 'The full content of the script to execute.'
+                                        },
+                                        'interpreter': {
+                                            'type': 'string',
+                                            'description': 'The interpreter to use (e.g. bash, python3). Defaults to bash.'
+                                        },
+                                    },
+                                    'required': ['script_content'],
+                                },
                             },
                         }
                     ]
