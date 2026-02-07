@@ -18,16 +18,11 @@ app = FastAPI(title="HLMagic Web Interface")
 agent = HLMagicAgent()
 
 def debug_log(msg: str):
-    """Log to console and file if debug mode is enabled."""
+    """Log to console (systemd will capture this and write to server.log)."""
     if get_debug_mode():
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         formatted = f"[{timestamp}] DEBUG: {msg}"
         print(formatted)
-        try:
-            # Note: /opt/hlmagic/server.log is where we redirect stdout/stderr in install.ps1
-            with open("/opt/hlmagic/server.log", "a") as f:
-                f.write(formatted + "\n")
-        except: pass
 
 def auto_update_loop():
     """Background task to automatically check and apply updates."""

@@ -20,8 +20,11 @@ def serve(host: str = "0.0.0.0", port: int = 8000):
     # Pre-flight: Clear any existing process on this port
     try:
         # Simple bash command to find and kill port holder
-        cmd = f"fuser -k {port}/tcp"
-        subprocess.run(cmd.split(), capture_output=True)
+        # We use sudo -n (non-interactive) to ensure we can kill even if owned by root
+        subprocess.run(["sudo", "-n", "fuser", "-k", f"{port}/tcp"], capture_output=True)
+        # Give the kernel a moment to release the socket
+        import time
+        time.sleep(1)
     except: pass
 
     console.print(f"[bold green]Starting HLMagic Web Interface on {host}:{port}...[/bold green]")
