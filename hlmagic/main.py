@@ -17,14 +17,23 @@ def serve(host: str = "0.0.0.0", port: int = 8000):
     import os
     from hlmagic.server import app as server_app
     
-    # Pre-flight: Clear any existing process on this port
+    # Pre-flight: Clear any existing process on this port (except ourselves)
     try:
-        # Simple bash command to find and kill port holder
-        # We use sudo -n (non-interactive) to ensure we can kill even if owned by root
-        subprocess.run(["sudo", "-n", "fuser", "-k", f"{port}/tcp"], capture_output=True)
+        my_pid = os.getpid()
+        # Find who is using the port
+        find_cmd = f"fuser {port}/tcp"
+        res = subprocess.run(find_cmd.split(), capture_output=True, text=True)
+        if res.stdout.strip():
+            for pid_str in res.stdout.split():
+                try:
+                    pid = int(pid_str.strip())
+                    if pid != my_pid:
+                        subprocess.run(["sudo", "-n", "kill", "-9", str(pid)], capture_output=True)
+                except: continue
+        
         # Give the kernel a moment to release the socket
         import time
-        time.sleep(1)
+        time.sleep(0.5)
     except: pass
 
     console.print(f"[bold green]Starting HLMagic Web Interface on {host}:{port}...[/bold green]")
