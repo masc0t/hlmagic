@@ -10,7 +10,7 @@ console = Console()
 app.command()(init)
 
 @app.command()
-def serve(host: str = "0.0.0.0", port: int = 8000):
+def serve(host: str = "::", port: int = 8000):
     """Start the HLMagic Web Interface."""
     import uvicorn
     import subprocess
