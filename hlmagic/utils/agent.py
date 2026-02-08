@@ -1,6 +1,8 @@
 import ollama
 import json
 import subprocess
+import time
+from pathlib import Path
 from typing import List, Dict, Any
 from rich.console import Console
 from hlmagic.utils import tools, config
@@ -16,9 +18,54 @@ def debug_log(msg: str):
 
 console = Console()
 
+class SessionLogger:
+    def __init__(self):
+        conf = config.load_config()
+        self.base_path = Path(conf['storage']['base_path']) / "sessions"
+        self.max_sessions = conf.get('system', {}).get('max_sessions', 5)
+        self.base_path.mkdir(parents=True, exist_ok=True)
+
+    def save_session(self, messages: List[Dict[str, Any]]):
+        """Save the entire session history to a file and rotate old sessions."""
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        filename = self.base_path / f"session_{timestamp}.json"
+        
+        # Ensure everything is a plain dict for JSON serialization
+        serializable_messages = []
+        for m in messages:
+            if hasattr(m, 'model_dump'): # Pydantic v2
+                serializable_messages.append(m.model_dump())
+            elif hasattr(m, 'dict'): # Pydantic v1
+                serializable_messages.append(m.dict())
+            elif isinstance(m, dict):
+                serializable_messages.append(m)
+            else:
+                # Fallback: try to convert to dict manually or stringify
+                try:
+                    serializable_messages.append(dict(m))
+                except:
+                    serializable_messages.append(str(m))
+
+        with open(filename, "w") as f:
+            json.dump(serializable_messages, f, indent=4)
+        
+        self._rotate_sessions()
+
+    def _rotate_sessions(self):
+        """Keep only the N most recent session files."""
+        sessions = sorted(self.base_path.glob("session_*.json"), key=lambda x: x.stat().st_mtime)
+        while len(sessions) > self.max_sessions:
+            oldest = sessions.pop(0)
+            try:
+                oldest.unlink()
+            except:
+                pass
+
 class HLMagicAgent:
     def __init__(self, model: str = None):
         self.model = model or config.get_model()
+        self.client = ollama.Client(host=config.get_ollama_host())
+        self.session_logger = SessionLogger()
         
         # Get Hardware Context
         scanner = HardwareScanner()
@@ -37,7 +84,7 @@ class HLMagicAgent:
             "3. Use execute_autonomous_task to write 'Action Scripts' to apply fixes. "
             "Stay in tool-calling mode until the task is 100% complete. "
             "Assume anything the user asks about is their own personal homelab. "
-            "Always prefer /opt/hlmagic/ for configurations. "
+            f"Always prefer {config.load_config()['storage']['base_path']} for configurations. "
             f"Current User IDs: {tools.get_user_ids()} "
             f"Hardware Acceleration: {primary_gpu.upper()} "
             f"Resource Constraints: {json.dumps(hw_env)} "
@@ -68,7 +115,7 @@ class HLMagicAgent:
         try:
             # The ollama-python library returns a ListResponse or similar
             # where models is a list of Model objects.
-            response = ollama.list()
+            response = self.client.list()
             # Handle different possible response structures
             models_list = response.get('models', [])
             model_names = []
@@ -85,11 +132,11 @@ class HLMagicAgent:
                 target += ":latest"
             
             if target not in model_names and self.model not in model_names:
-                console.print(f"[yellow]Model '{self.model}' not found. Pulling...[/yellow]")
-                subprocess.run(["ollama", "pull", self.model], check=True)
+                console.print(f"[yellow]Model '{self.model}' not found on host {config.get_ollama_host()}. Pulling...[/yellow]")
+                self.client.pull(self.model)
                 console.print(f"[green]✓ Model '{self.model}' pulled.[/green]")
         except Exception as e:
-            console.print(f"[yellow]Warning: Could not verify/pull model '{self.model}': {e}[/yellow]")
+            console.print(f"[yellow]Warning: Could not verify/pull model '{self.model}' on {config.get_ollama_host()}: {e}[/yellow]")
 
     def run(self, user_input: str) -> str:
         """Main loop for processing user requests with tool support."""
@@ -103,195 +150,198 @@ class HLMagicAgent:
 
         console.print(f"[bold cyan]HLMagic Brain thinking...[/bold cyan]")
         
-        # Limit to 10 iterations to prevent infinite loops
-        for _ in range(10):
-            try:
-                response = ollama.chat(
-                    model=self.model,
-                    messages=messages,
-                    tools=[
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'scan_wsl_storage',
-                                'description': 'Identify Windows mount points for media.',
-                            },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'check_service_status',
-                                'description': 'Check if docker or ollama services are running.',
-                                'parameters': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'service_name': {'type': 'string'},
-                                    },
+        try:
+            # Limit to 10 iterations to prevent infinite loops
+            for _ in range(10):
+                try:
+                    response = self.client.chat(
+                        model=self.model,
+                        messages=messages,
+                        tools=[
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'scan_wsl_storage',
+                                    'description': 'Identify Windows mount points for media.',
                                 },
                             },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'get_optimized_template',
-                                'description': 'Retrieve the hardware-optimized docker-compose YAML content for a service. Use this output for write_compose_file.',
-                                'parameters': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'service_name': {'type': 'string'},
-                                        'mounts': {
-                                            'type': 'array',
-                                            'items': {'type': 'string'},
-                                            'description': 'Optional list of host paths to mount (e.g., ["/mnt/d/Movies"]).'
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'check_service_status',
+                                    'description': 'Check if docker or ollama services are running.',
+                                    'parameters': {
+                                        'type': 'object',
+                                        'properties': {
+                                            'service_name': {'type': 'string'},
                                         },
                                     },
-                                    'required': ['service_name'],
                                 },
                             },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'write_compose_file',
-                                'description': 'Save docker-compose content to disk. Requires EXACT content from get_optimized_template.',
-                                'parameters': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'service_name': {'type': 'string'},
-                                        'compose_content': {'type': 'string', 'description': 'The full YAML content to write.'},
-                                    },
-                                    'required': ['service_name', 'compose_content'],
-                                },
-                            },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'deploy_service',
-                                'description': 'Start a service stack. MUST be called after write_compose_file.',
-                                'parameters': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'service_name': {'type': 'string'},
-                                    },
-                                    'required': ['service_name'],
-                                },
-                            },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'setup_and_deploy_service',
-                                'description': 'The most efficient way to setup a service. Combines template, file writing, and deployment into one call.',
-                                'parameters': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'service_name': {'type': 'string'},
-                                        'mounts': {
-                                            'type': 'array',
-                                            'items': {'type': 'string'},
-                                            'description': 'List of exact host paths (e.g. ["/mnt/d/Movies"]). Use scan_wsl_storage first.'
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'get_optimized_template',
+                                    'description': 'Retrieve the hardware-optimized docker-compose YAML content for a service. Use this output for write_compose_file.',
+                                    'parameters': {
+                                        'type': 'object',
+                                        'properties': {
+                                            'service_name': {'type': 'string'},
+                                            'mounts': {
+                                                'type': 'array',
+                                                'items': {'type': 'string'},
+                                                'description': 'Optional list of host paths to mount (e.g., ["/mnt/d/Movies"]).'
+                                            },
                                         },
+                                        'required': ['service_name'],
                                     },
-                                    'required': ['service_name'],
                                 },
                             },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'check_for_updates',
-                                'description': 'Check if a newer version of HLMagic is available on GitHub.',
-                            },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'apply_update',
-                                'description': 'Download and install the latest version of HLMagic. Will require a restart of the web interface.',
-                            },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'get_service_urls',
-                                'description': 'Retrieve the local URLs and ports for all active homelab services.',
-                            },
-                        },
-                        {
-                            'type': 'function',
-                            'function': {
-                                'name': 'execute_autonomous_task',
-                                'description': 'Execute a complex task by writing and running an ephemeral script. Use this for discovery, analysis, and custom fixes.',
-                                'parameters': {
-                                    'type': 'object',
-                                    'properties': {
-                                        'script_content': {
-                                            'type': 'string',
-                                            'description': 'The full content of the script to execute.'
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'write_compose_file',
+                                    'description': 'Save docker-compose content to disk. Requires EXACT content from get_optimized_template.',
+                                    'parameters': {
+                                        'type': 'object',
+                                        'properties': {
+                                            'service_name': {'type': 'string'},
+                                            'compose_content': {'type': 'string', 'description': 'The full YAML content to write.'},
                                         },
-                                        'interpreter': {
-                                            'type': 'string',
-                                            'description': 'The interpreter to use (e.g. bash, python3). Defaults to bash.'
-                                        },
+                                        'required': ['service_name', 'compose_content'],
                                     },
-                                    'required': ['script_content'],
                                 },
                             },
-                        }
-                    ]
-                )
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'deploy_service',
+                                    'description': 'Start a service stack. MUST be called after write_compose_file.',
+                                    'parameters': {
+                                        'type': 'object',
+                                        'properties': {
+                                            'service_name': {'type': 'string'},
+                                        },
+                                        'required': ['service_name'],
+                                    },
+                                },
+                            },
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'setup_and_deploy_service',
+                                    'description': 'The most efficient way to setup a service. Combines template, file writing, and deployment into one call.',
+                                    'parameters': {
+                                        'type': 'object',
+                                        'properties': {
+                                            'service_name': {'type': 'string'},
+                                            'mounts': {
+                                                'type': 'array',
+                                                'items': {'type': 'string'},
+                                                'description': 'List of exact host paths (e.g. ["/mnt/d/Movies"]). Use scan_wsl_storage first.'
+                                            },
+                                        },
+                                        'required': ['service_name'],
+                                    },
+                                },
+                            },
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'check_for_updates',
+                                    'description': 'Check if a newer version of HLMagic is available on GitHub.',
+                                },
+                            },
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'apply_update',
+                                    'description': 'Download and install the latest version of HLMagic. Will require a restart of the web interface.',
+                                },
+                            },
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'get_service_urls',
+                                    'description': 'Retrieve the local URLs and ports for all active homelab services.',
+                                },
+                            },
+                            {
+                                'type': 'function',
+                                'function': {
+                                    'name': 'execute_autonomous_task',
+                                    'description': 'Execute a complex task by writing and running an ephemeral script. Use this for discovery, analysis, and custom fixes.',
+                                    'parameters': {
+                                        'type': 'object',
+                                        'properties': {
+                                            'script_content': {
+                                                'type': 'string',
+                                                'description': 'The full content of the script to execute.'
+                                            },
+                                            'interpreter': {
+                                                'type': 'string',
+                                                'description': 'The interpreter to use (e.g. bash, python3). Defaults to bash.'
+                                            },
+                                        },
+                                        'required': ['script_content'],
+                                    },
+                                },
+                            }
+                        ]
+                    )
 
-                message = response['message']
-                
-                # Programmatic Hallucination Shield:
-                # If the model provides tool calls AND conversational text, 
-                # we discard the text to prevent "talking about" the action.
-                if message.get('tool_calls') and message.get('content'):
-                    debug_log(f"Hallucination Detected: Model tried to talk while calling tools. Stripping content.")
-                    message['content'] = ""
-
-                messages.append(message)
-
-                # If no tool calls, the brain is done talking to us
-                if not message.get('tool_calls'):
-                    content = message.get('content', "Task completed.")
-                    console.print(f"\n[bold green]HLMagic:[/bold green] {content}")
-                    return content
-
-                # Process tool calls
-                for tool_call in message['tool_calls']:
-                    function_name = tool_call['function']['name']
-                    args = tool_call['function']['arguments']
+                    message = response['message']
                     
-                    console.print(f"[yellow]Action: Calling tool {function_name} with args: {json.dumps(args)}...[/yellow]")
-                    
-                    if function_name in self.available_tools:
-                        try:
-                            result = self.available_tools[function_name](**args)
+                    # Programmatic Hallucination Shield:
+                    # If the model provides tool calls AND conversational text, 
+                    # we discard the text to prevent "talking about" the action.
+                    if message.get('tool_calls') and message.get('content'):
+                        debug_log(f"Hallucination Detected: Model tried to talk while calling tools. Stripping content.")
+                        message['content'] = ""
+
+                    messages.append(message)
+
+                    # If no tool calls, the brain is done talking to us
+                    if not message.get('tool_calls'):
+                        content = message.get('content', "Task completed.")
+                        console.print(f"\n[bold green]HLMagic:[/bold green] {content}")
+                        return content
+
+                    # Process tool calls
+                    for tool_call in message['tool_calls']:
+                        function_name = tool_call['function']['name']
+                        args = tool_call['function']['arguments']
+                        
+                        console.print(f"[yellow]Action: Calling tool {function_name} with args: {json.dumps(args)}...[/yellow]")
+                        
+                        if function_name in self.available_tools:
+                            try:
+                                result = self.available_tools[function_name](**args)
+                                messages.append({
+                                    'role': 'tool',
+                                    'content': str(result),
+                                })
+                            except TypeError as e:
+                                error_msg = f"Error: Tool {function_name} failed due to incorrect arguments: {e}"
+                                console.print(f"[red]{error_msg}[/red]")
+                                messages.append({
+                                    'role': 'tool',
+                                    'content': error_msg,
+                                })
+                        else:
                             messages.append({
                                 'role': 'tool',
-                                'content': str(result),
+                                'content': f"Error: Tool {function_name} not found.",
                             })
-                        except TypeError as e:
-                            error_msg = f"Error: Tool {function_name} failed due to incorrect arguments: {e}"
-                            console.print(f"[red]{error_msg}[/red]")
-                            messages.append({
-                                'role': 'tool',
-                                'content': error_msg,
-                            })
-                    else:
-                        messages.append({
-                            'role': 'tool',
-                            'content': f"Error: Tool {function_name} not found.",
-                        })
 
-            except Exception as e:
-                error_msg = f"Error interacting with Ollama: {e}"
+                except Exception as e:
+                    error_msg = f"Error interacting with Ollama: {e}"
+                    console.print(f"[red]{error_msg}[/red]")
+                    return error_msg
+            else:
+                error_msg = "Error: Brain reached maximum thought depth (10 steps)."
                 console.print(f"[red]{error_msg}[/red]")
                 return error_msg
-        else:
-            error_msg = "Error: Brain reached maximum thought depth (10 steps)."
-            console.print(f"[red]{error_msg}[/red]")
-            return error_msg
+        finally:
+            self.session_logger.save_session(messages)
 

@@ -11,6 +11,7 @@ from hlmagic.utils.update import check_for_updates, apply_update, get_current_ve
 from hlmagic.utils.config import get_password, set_password, get_debug_mode, set_debug_mode
 import threading
 import time
+import platform
 
 app = FastAPI(title="HLMagic Web Interface")
 
@@ -18,11 +19,21 @@ app = FastAPI(title="HLMagic Web Interface")
 agent = HLMagicAgent()
 
 def debug_log(msg: str):
-    """Log to console (systemd will capture this and write to server.log)."""
+    """Log to console and the server.log file."""
     if get_debug_mode():
         timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
         formatted = f"[{timestamp}] DEBUG: {msg}"
         print(formatted)
+        
+        # Also write to file
+        try:
+            from hlmagic.utils.config import load_config
+            log_path = Path(load_config()['storage']['base_path']) / "server.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, "a") as f:
+                f.write(formatted + "\n")
+        except:
+            pass
 
 def auto_update_loop():
     """Background task to automatically check and apply updates."""
@@ -195,97 +206,146 @@ async def run_restart(authenticated: bool = Depends(is_authenticated)):
 async def system_status(authenticated: bool = Depends(is_authenticated)):
     if not authenticated: raise HTTPException(status_code=401)
     
-    from hlmagic.utils.tools import scan_wsl_storage
-    from hlmagic.utils.hardware import HardwareScanner
-    import subprocess
-    from pathlib import Path
-
-    # 1. Core Services (Ollama is now managed as a deployed service)
-    core = {}
-    for svc in ["docker", "avahi-daemon"]:
-        res = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True)
-        core[svc] = res.stdout.strip()
-
-    # Check for Windows Ollama conflict (common in Mirrored Mode)
-    ollama_conflict = False
     try:
-        import socket
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.1)
-            # Port 11434 will be open if Windows Ollama or our Docker service is running
-            if s.connect_ex(('127.0.0.1', 11434)) == 0:
-                # If port is open, check if it's our docker container
-                docker_check = subprocess.run(
-                    ["docker", "ps", "-q", "-f", "name=ollama"],
-                    capture_output=True, text=True
-                )
-                if not docker_check.stdout.strip():
-                    # Port is open but NO ollama container found -> Windows conflict
-                    ollama_conflict = True
-    except: pass
+        from hlmagic.utils.tools import scan_wsl_storage
+        from hlmagic.utils.hardware import HardwareScanner
+        import subprocess
+        from pathlib import Path
 
-    # 2. Deployed Services
-    services = []
-    base_path = Path("/opt/hlmagic/services")
-    if base_path.exists():
-        for service_dir in base_path.iterdir():
-            if service_dir.is_dir() and (service_dir / "docker-compose.yml").exists():
-                name = service_dir.name
-                status = "Stopped"
+        # 1. Core Services
+        core = {}
+        if os.name == 'posix':
+            for svc in ["docker", "avahi-daemon"]:
+                res = subprocess.run(["systemctl", "is-active", svc], capture_output=True, text=True)
+                core[svc] = res.stdout.strip()
+        else:
+            # On Windows, we can check if Docker is running via process
+            docker_running = "inactive"
+            for proc in psutil.process_iter(['name']):
                 try:
-                    res = subprocess.run(
-                        ["sudo", "docker", "compose", "ps", "--format", "json"],
-                        cwd=service_dir, capture_output=True, text=True
-                    )
-                    if res.returncode == 0 and res.stdout.strip():
-                        status = "Running"
-                except: status = "Error"
-                services.append({"name": name, "status": status})
+                    if 'Docker Desktop' in proc.info['name'] or 'dockerd' in proc.info['name']:
+                        docker_running = "active"
+                        break
+                except: continue
+            core["docker"] = docker_running
 
-    # 3. Hardware & System Metrics
-    scanner = HardwareScanner()
-    scanner.scan()
-    
-    # CPU Info
-    cpu_usage = psutil.cpu_percent(interval=None) # Non-blocking
-    cpu_count = psutil.cpu_count(logical=False)
-    cpu_threads = psutil.cpu_count(logical=True)
-    
-    # Memory Info
-    mem = psutil.virtual_memory()
-    
-    # Disk Info
-    disk = psutil.disk_usage('/opt/hlmagic')
-    
-    return {
-        "core": core,
-        "ollama_conflict": ollama_conflict,
-        "services": services,
-        "hardware": {
-            "gpu": scanner.primary_gpu.value,
-            "vram_split": scanner.vram_split,
-            "storage": scan_wsl_storage()
-        },
-        "system": {
-            "cpu_usage": cpu_usage,
-            "cpu_cores": f"{cpu_count}C/{cpu_threads}T",
-            "ram_total": round(mem.total / (1024**3), 1),
-            "ram_used": round(mem.used / (1024**3), 1),
-            "ram_percent": mem.percent,
-            "disk_total": round(disk.total / (1024**3), 1),
-            "disk_used": round(disk.used / (1024**3), 1),
-            "disk_percent": disk.percent,
-            "kernel": subprocess.run(["uname", "-r"], capture_output=True, text=True).stdout.strip()
+        # Ollama Status & Conflict Check
+        from hlmagic.utils.config import get_ollama_host
+        ollama_host = get_ollama_host()
+        ollama_online = False
+        ollama_conflict = False
+        
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(ollama_host)
+            host = parsed.hostname or '127.0.0.1'
+            port = parsed.port or 11434
+            
+            import socket
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)
+                if s.connect_ex((host, port)) == 0:
+                    ollama_online = True
+                    
+                    # Check for conflict ONLY if using localhost on Linux
+                    if os.name == 'posix' and host in ["127.0.0.1", "localhost"]:
+                        docker_check = subprocess.run(
+                            ["docker", "ps", "-q", "-f", "name=ollama"],
+                            capture_output=True, text=True
+                        )
+                        if not docker_check.stdout.strip():
+                            # Port is open but NO ollama container found -> likely Windows Ollama
+                            ollama_conflict = True
+        except: pass
+
+        # 2. Deployed Services
+        services = []
+        from hlmagic.utils.config import load_config
+        base_path = Path(load_config()['storage']['base_path']) / "services"
+        if base_path.exists():
+            for service_dir in base_path.iterdir():
+                if service_dir.is_dir() and (service_dir / "docker-compose.yml").exists():
+                    name = service_dir.name
+                    status = "Stopped"
+                    try:
+                        cmd = ["docker", "compose", "ps", "--format", "json"]
+                        if os.name == 'posix': cmd.insert(0, "sudo")
+                        res = subprocess.run(cmd, cwd=service_dir, capture_output=True, text=True)
+                        if res.returncode == 0 and res.stdout.strip():
+                            status = "Running"
+                    except: status = "Error"
+                    services.append({"name": name, "status": status})
+
+        # 3. Hardware & System Metrics
+        scanner = HardwareScanner()
+        scanner.scan()
+        
+        # CPU Info
+        cpu_usage = psutil.cpu_percent(interval=None) # Non-blocking
+        cpu_count = psutil.cpu_count(logical=False)
+        cpu_threads = psutil.cpu_count(logical=True)
+        
+        # Memory Info
+        mem = psutil.virtual_memory()
+        
+        # Disk Info
+        disk_path = load_config()['storage']['base_path']
+        if not os.path.exists(disk_path):
+            disk_path = "C:\\" if os.name == 'nt' else "/"
+        try:
+            disk = psutil.disk_usage(disk_path)
+        except:
+            disk = psutil.disk_usage("C:\\" if os.name == 'nt' else "/")
+        
+        return {
+            "core": core,
+            "ollama": {
+                "online": ollama_online,
+                "host": ollama_host,
+                "conflict": ollama_conflict
+            },
+            "services": services,
+            "hardware": {
+                "gpu": scanner.primary_gpu.value,
+                "vram_split": scanner.vram_split,
+                "storage": scan_wsl_storage()
+            },
+            "system": {
+                "cpu_usage": cpu_usage,
+                "cpu_cores": f"{cpu_count}C/{cpu_threads}T",
+                "ram_total": round(mem.total / (1024**3), 1),
+                "ram_used": round(mem.used / (1024**3), 1),
+                "ram_percent": mem.percent,
+                "disk_total": round(disk.total / (1024**3), 1),
+                "disk_used": round(disk.used / (1024**3), 1),
+                "disk_percent": disk.percent,
+                "kernel": platform.uname().release
+            }
         }
-    }
+    except Exception as e:
+        debug_log(f"System status error: {e}")
+        return {"error": str(e)}
 
 @app.get("/settings")
 async def get_settings(authenticated: bool = Depends(is_authenticated)):
     if not authenticated: raise HTTPException(status_code=401)
+    from hlmagic.utils.config import get_ollama_host, get_model
     return {
         "debug": get_debug_mode(),
-        "version": get_current_version()
+        "version": get_current_version(),
+        "ollama_host": get_ollama_host(),
+        "model": get_model()
     }
+
+@app.post("/settings/ollama-host")
+async def update_ollama_host(host: str = Form(...), authenticated: bool = Depends(is_authenticated)):
+    if not authenticated: raise HTTPException(status_code=401)
+    from hlmagic.utils.config import set_ollama_host
+    set_ollama_host(host)
+    # Re-initialize agent with new host
+    global agent
+    agent = HLMagicAgent()
+    return {"success": True, "host": host}
 
 @app.post("/settings/debug/{enabled}")
 async def toggle_debug(enabled: bool, authenticated: bool = Depends(is_authenticated)):
@@ -297,13 +357,15 @@ async def toggle_debug(enabled: bool, authenticated: bool = Depends(is_authentic
 @app.get("/logs")
 async def get_logs(authenticated: bool = Depends(is_authenticated)):
     if not authenticated: raise HTTPException(status_code=401)
+    from hlmagic.utils.config import load_config
+    log_path = Path(load_config()['storage']['base_path']) / "server.log"
     try:
-        if os.path.exists("/opt/hlmagic/server.log"):
-            with open("/opt/hlmagic/server.log", "r") as f:
+        if log_path.exists():
+            with open(log_path, "r") as f:
                 # Return last 200 lines
                 lines = f.readlines()
                 return {"logs": "".join(lines[-200:])}
-        return {"logs": "Log file not found."}
+        return {"logs": f"Log file not found at {log_path}."}
     except Exception as e:
         return {"logs": f"Error reading logs: {e}"}
 
@@ -312,12 +374,15 @@ async def manage_service(name: str, action: str, authenticated: bool = Depends(i
     if not authenticated: raise HTTPException(status_code=401)
     import subprocess
     from pathlib import Path
+    from hlmagic.utils.config import load_config
     
-    service_dir = Path(f"/opt/hlmagic/services/{name}")
+    service_dir = Path(load_config()['storage']['base_path']) / "services" / name
     if not service_dir.exists():
         raise HTTPException(status_code=404, detail="Service not found")
     
-    cmd = ["sudo", "docker", "compose", "up", "-d"] if action == "start" else ["sudo", "docker", "compose", "down"]
+    cmd = ["docker", "compose", "up", "-d"] if action == "start" else ["docker", "compose", "down"]
+    if os.name == 'posix': cmd.insert(0, "sudo")
+    
     res = subprocess.run(cmd, cwd=service_dir, capture_output=True, text=True)
     
     return {"success": res.returncode == 0, "output": res.stdout or res.stderr}
@@ -328,7 +393,11 @@ async def index(hl_token: str = Cookie(None)):
         return RedirectResponse(url="/setup-password")
     if hl_token != get_password():
         return RedirectResponse(url="/login")
-    return """
+    
+    from hlmagic.utils.config import load_config
+    log_path = Path(load_config()['storage']['base_path']) / "server.log"
+    
+    html_content = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -424,6 +493,16 @@ async def index(hl_token: str = Cookie(None)):
                                 Disabled
                             </button>
                         </div>
+                        <div class="flex items-center justify-between pt-6 border-t border-gray-700">
+                            <div class="flex-1 mr-4">
+                                <h3 class="font-bold">AI Brain (Ollama Host)</h3>
+                                <p class="text-xs text-gray-400">Endpoint for HLMagic reasoning. Default: http://localhost:11434</p>
+                                <input type="text" id="ollama-host-input" class="mt-2 w-full bg-gray-900 border border-gray-700 rounded-xl py-2 px-4 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                            </div>
+                            <button onclick="saveOllamaHost()" class="px-4 py-2 rounded-xl text-xs font-bold transition-colors bg-blue-600 hover:bg-blue-500 text-white">
+                                Save
+                            </button>
+                        </div>
                     </div>
                 </section>
 
@@ -431,7 +510,7 @@ async def index(hl_token: str = Cookie(None)):
                     <h2 class="text-lg font-bold mb-4 flex items-center"><span class="mr-2">📜</span> System Logs</h2>
                     <div class="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
                         <div class="bg-gray-800 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
-                            <span class="text-xs font-mono text-gray-400">/opt/hlmagic/server.log</span>
+                            <span class="text-xs font-mono text-gray-400">{{LOG_PATH}}</span>
                             <button onclick="refreshLogs()" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">Refresh</button>
                         </div>
                         <pre id="log-viewer" class="p-4 text-[10px] font-mono text-gray-300 overflow-x-auto h-96 overflow-y-auto whitespace-pre-wrap">Loading logs...</pre>
@@ -506,7 +585,18 @@ async def index(hl_token: str = Cookie(None)):
                         btn.innerText = "Disabled";
                         btn.classList.replace('bg-blue-600', 'bg-gray-700');
                     }
+                    document.getElementById('ollama-host-input').value = data.ollama_host;
                 } catch (e) {}
+            }
+
+            async function saveOllamaHost() {
+                const host = document.getElementById('ollama-host-input').value;
+                const formData = new FormData();
+                formData.append('host', host);
+                try {
+                    await fetch('/settings/ollama-host', { method: 'POST', body: formData });
+                    alert("Ollama host updated and brain re-initialized.");
+                } catch (e) { alert("Failed to save Ollama host."); }
             }
 
             async function toggleDebug() {
@@ -533,18 +623,34 @@ async def index(hl_token: str = Cookie(None)):
             async function refreshDashboard() {
                 try {
                     const res = await fetch('/system-status');
+                    if (!res.ok) throw new Error(`API Error: ${res.status}`);
                     const data = await res.json();
+                    
+                    if (data.error) {
+                        alert("Dashboard error: " + data.error);
+                        return;
+                    }
                     
                     // 0. Global Alerts
                     const alerts = document.getElementById('global-alerts') || document.createElement('div');
                     alerts.id = 'global-alerts';
                     alerts.innerHTML = '';
-                    if (data.ollama_conflict) {
+                    if (data.ollama.conflict) {
                         alerts.innerHTML = `
                             <div class="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded-xl flex items-center justify-between mb-6">
                                 <div class="flex items-center">
                                     <span class="text-xl mr-3">⚠️</span>
-                                    <p class="text-sm"><strong>Port Conflict:</strong> Ollama for Windows is running and blocking the HLMagic AI Engine. Please close Ollama for Windows to use HLMagic.</p>
+                                    <p class="text-sm"><strong>Port Conflict:</strong> Ollama for Windows is running and blocking the HLMagic AI Engine. Please close Ollama for Windows or configure HLMagic to use it as the host in Settings.</p>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    if (!data.ollama.online && !data.ollama.conflict) {
+                        alerts.innerHTML += `
+                            <div class="bg-amber-900 border border-amber-700 text-amber-100 px-4 py-3 rounded-xl flex items-center justify-between mb-6">
+                                <div class="flex items-center">
+                                    <span class="text-xl mr-3">🔌</span>
+                                    <p class="text-sm"><strong>Ollama Offline:</strong> The AI Brain is unreachable at ${data.ollama.host}. Please ensure Ollama is running.</p>
                                 </div>
                             </div>
                         `;
@@ -611,6 +717,14 @@ async def index(hl_token: str = Cookie(None)):
                         </div>
 
                         <div class="space-y-1 mt-4">
+                            <span class="text-xs text-gray-500 uppercase font-bold">AI Brain (Ollama)</span>
+                            <div class="flex justify-between items-center bg-gray-900 px-3 py-2 rounded-xl border border-gray-700">
+                                <span class="text-xs text-gray-400">Host: ${data.ollama.host}</span>
+                                <span class="text-xs font-mono font-bold ${data.ollama.online ? 'text-green-400' : 'text-red-400'}">${data.ollama.online ? 'ONLINE' : 'OFFLINE'}</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1 mt-4">
                             <span class="text-xs text-gray-500 uppercase font-bold">GPU Acceleration</span>
                             <div class="flex justify-between items-center bg-gray-900 px-3 py-2 rounded-xl border border-gray-700">
                                 <span class="text-xs text-gray-400">Primary: ${data.hardware.gpu.toUpperCase()}</span>
@@ -619,7 +733,7 @@ async def index(hl_token: str = Cookie(None)):
                         </div>
 
                         <div class="space-y-1 mt-4">
-                            <span class="text-xs text-gray-500 uppercase font-bold">Storage (/opt/hlmagic)</span>
+                            <span class="text-xs text-gray-500 uppercase font-bold">Storage (Data Path)</span>
                             <div class="flex justify-between items-center bg-gray-900 px-3 py-2 rounded-xl border border-gray-700">
                                 <span class="text-xs text-gray-400">${data.system.disk_used}/${data.system.disk_total}GB</span>
                                 <div class="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden">
@@ -791,6 +905,7 @@ async def index(hl_token: str = Cookie(None)):
     </body>
     </html>
     """
+    return html_content.replace("{{LOG_PATH}}", str(log_path))
 
 @app.post("/chat")
 async def chat(request: ChatRequest, authenticated: bool = Depends(is_authenticated)):

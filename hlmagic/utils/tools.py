@@ -73,45 +73,46 @@ def get_optimized_template(service_name: str, mounts: List[str] = None) -> str:
     return template
 
 def scan_wsl_storage() -> List[Dict[str, str]]:
-    """Identify Windows mount points (e.g., /mnt/d/) for media storage."""
+    """Identify mount points for media storage. On Windows, finds all drive letters."""
     mounts = []
     for part in psutil.disk_partitions():
-        if part.mountpoint.startswith("/mnt/") and len(part.mountpoint) > 5:
-            mounts.append({
-                "path": part.mountpoint,
-                "device": part.device,
-                "fstype": part.fstype
-            })
+        if os.name == 'nt':
+            # On Windows, list all fixed drives
+            if 'fixed' in part.opts or part.fstype:
+                mounts.append({
+                    "path": part.mountpoint,
+                    "device": part.device,
+                    "fstype": part.fstype
+                })
+        else:
+            # On Linux/WSL, find Windows mounts
+            if part.mountpoint.startswith("/mnt/") and len(part.mountpoint) > 5:
+                mounts.append({
+                    "path": part.mountpoint,
+                    "device": part.device,
+                    "fstype": part.fstype
+                })
     return mounts
 
 def write_compose_file(service_name: str, compose_content: str):
-    """Generate Docker Compose YAMLs in the standard /opt/hlmagic/ path."""
+    """Generate Docker Compose YAMLs in the standard path."""
     try:
+        from hlmagic.utils.config import load_config
         # 1. Input Sanitization
         _validate_service_name(service_name)
         _validate_compose_content(compose_content)
 
         # 2. Path Confinement
-        base_path = Path("/opt/hlmagic/services").resolve()
+        base_path = Path(load_config()['storage']['base_path']) / "services"
         target_dir = (base_path / service_name).resolve()
 
-        # Ensure we didn't escape /opt/hlmagic/services (double check)
-        if not str(target_dir).startswith(str(base_path)):
-            raise SecurityViolation("Path traversal detected: Target directory matches outside /opt/hlmagic.")
-
-        # 3. Execution (removed sudo as user owns /opt/hlmagic)
+        # 3. Execution
         os.makedirs(str(target_dir), exist_ok=True)
         
-        temp_file = Path(f"/tmp/{service_name}_docker-compose.yml")
-        temp_file.write_text(compose_content)
+        compose_file = target_dir / "docker-compose.yml"
+        compose_file.write_text(compose_content)
         
-        # Verify temp file exists before moving
-        if not temp_file.exists():
-             raise IOError("Failed to write temporary compose file.")
-
-        import shutil
-        shutil.move(str(temp_file), str(target_dir / "docker-compose.yml"))
-        return f"Successfully wrote compose file to {target_dir}/docker-compose.yml"
+        return f"Successfully wrote compose file to {compose_file}"
 
     except SecurityViolation as e:
         return f"SECURITY BLOCK: {str(e)}"
@@ -141,10 +142,11 @@ def setup_and_deploy_service(service_name: str, mounts: List[str] = None) -> str
 def deploy_service(service_name: str) -> str:
     """Start a service using docker compose. Creates config directories automatically."""
     try:
+        from hlmagic.utils.config import load_config
         # 1. Path Setup
-        base_path = Path("/opt/hlmagic/services").resolve()
+        base_path = Path(load_config()['storage']['base_path']) / "services"
         service_dir = (base_path / service_name).resolve()
-        config_dir = Path(f"/opt/hlmagic/config/{service_name}").resolve()
+        config_dir = Path(load_config()['storage']['base_path']) / "config" / service_name
 
         if not (service_dir / "docker-compose.yml").exists():
             return f"Error: No docker-compose.yml found in {service_dir}. Write the file first!"
@@ -152,10 +154,11 @@ def deploy_service(service_name: str) -> str:
         # 2. Pre-flight: Create config dir with correct permissions
         os.makedirs(str(config_dir), exist_ok=True)
 
-        # 3. Execution (removed sudo as user is in docker group)
+        # 3. Execution
         console.print(f"[yellow]Deploying {service_name}...[/yellow]")
+        cmd = ["docker", "compose", "up", "-d"]
         result = subprocess.run(
-            ["docker", "compose", "up", "-d"],
+            cmd,
             cwd=service_dir,
             capture_output=True,
             text=True
@@ -237,7 +240,8 @@ def get_service_urls() -> Dict[str, str]:
         "ollama": 11434
     }
 
-    base_path = Path("/opt/hlmagic/services")
+    from hlmagic.utils.config import load_config
+    base_path = Path(load_config()['storage']['base_path']) / "services"
     if base_path.exists():
         for service_dir in base_path.iterdir():
             if service_dir.is_dir() and (service_dir / "docker-compose.yml").exists():
@@ -250,8 +254,15 @@ def get_service_urls() -> Dict[str, str]:
     return urls
 
 def get_user_ids() -> Dict[str, int]:
-    """Get PUID and PGID for the current WSL user (usually 1000)."""
-    return {
-        "PUID": os.getuid(),
-        "PGID": os.getgid()
-    }
+    """Get PUID and PGID for the current user. Returns 1000 on Windows as dummy."""
+    try:
+        return {
+            "PUID": os.getuid(),
+            "PGID": os.getgid()
+        }
+    except AttributeError:
+        # We are on Windows, return standard IDs
+        return {
+            "PUID": 1000,
+            "PGID": 1000
+        }

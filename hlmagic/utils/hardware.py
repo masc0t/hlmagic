@@ -24,6 +24,9 @@ class HardwareScanner:
 
     def _ensure_dependencies(self):
         """Ensure system tools like lspci, curl, and gnupg are installed."""
+        if os.name != 'posix':
+            return # Skip on Windows
+
         deps = {
             "lspci": "pciutils",
             "curl": "curl",
@@ -48,23 +51,44 @@ class HardwareScanner:
         self._ensure_dependencies()
         detected = []
         
-        # 1. lspci Detection (Primary method)
-        try:
-            # -nn gets numeric IDs
-            lspci_nn = subprocess.run(["lspci", "-nn"], capture_output=True, text=True).stdout.lower()
-            lspci_raw = subprocess.run(["lspci"], capture_output=True, text=True).stdout.lower()
-            
-            if "10de" in lspci_nn or "nvidia" in lspci_raw: # NVIDIA
-                detected.append(GPUVendor.NVIDIA)
-            if "1002" in lspci_nn or any(x in lspci_raw for x in ["amd", "radeon", "navi", "advanced micro devices"]): # AMD
-                detected.append(GPUVendor.AMD)
-            if "8086" in lspci_nn or "intel" in lspci_raw: # Intel
-                 detected.append(GPUVendor.INTEL)
-                     
-        except FileNotFoundError:
-            pass
+        # 1. lspci Detection (Primary method for Linux)
+        if shutil.which("lspci"):
+            try:
+                # -nn gets numeric IDs
+                lspci_nn = subprocess.run(["lspci", "-nn"], capture_output=True, text=True).stdout.lower()
+                lspci_raw = subprocess.run(["lspci"], capture_output=True, text=True).stdout.lower()
+                
+                if "10de" in lspci_nn or "nvidia" in lspci_raw: # NVIDIA
+                    detected.append(GPUVendor.NVIDIA)
+                if "1002" in lspci_nn or any(x in lspci_raw for x in ["amd", "radeon", "navi", "advanced micro devices"]): # AMD
+                    detected.append(GPUVendor.AMD)
+                if "8086" in lspci_nn or "intel" in lspci_raw: # Intel
+                     detected.append(GPUVendor.INTEL)
+                         
+            except FileNotFoundError:
+                pass
 
-        # 2. Check /dev/dxg (WSL2 bridge)
+        # 2. Windows-Specific Detection (if lspci not found)
+        if os.name == 'nt' and not detected:
+            try:
+                # Check for NVIDIA
+                if shutil.which("nvidia-smi"):
+                    detected.append(GPUVendor.NVIDIA)
+                
+                # Check for AMD/Intel via PowerShell
+                res = subprocess.run(["powershell", "-NoProfile", "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name"], capture_output=True, text=True)
+                gpu_names = res.stdout.lower()
+                
+                if "nvidia" in gpu_names:
+                    if GPUVendor.NVIDIA not in detected: detected.append(GPUVendor.NVIDIA)
+                if "amd" in gpu_names or "radeon" in gpu_names:
+                    if GPUVendor.AMD not in detected: detected.append(GPUVendor.AMD)
+                if "intel" in gpu_names:
+                    if GPUVendor.INTEL not in detected: detected.append(GPUVendor.INTEL)
+            except:
+                pass
+
+        # 3. Check /dev/dxg (WSL2 bridge)
         # If lspci failed to show the physical IDs (common in some WSL versions/kernels),
         # but /dev/dxg exists, we have GPU passthrough.
         if Path("/dev/dxg").exists():
